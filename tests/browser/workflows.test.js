@@ -16,7 +16,7 @@ try {
   await page.getByText('첫 번째 순간을 녹음해 보세요.').waitFor();
   await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
   await page.getByText('지금, 소리를 담고 있어요').waitFor();
-  await page.waitForTimeout(1400);
+  await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await page.getByLabel('제목 필수').fill('브라우저 자동 검증');
   await page.getByLabel('장소 선택').fill('검증 환경');
@@ -81,7 +81,7 @@ try {
   });
   await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
   await page.getByText('지금, 소리를 담고 있어요').waitFor();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await page.getByLabel('제목 필수').fill('유지할 제목');
   assert.equal(await page.evaluate(() => window.lastStream.getTracks().every(track => track.readyState === 'ended')), true);
@@ -91,7 +91,7 @@ try {
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: '다시 녹음하기' }).click();
   await page.getByText('지금, 소리를 담고 있어요').waitFor();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await page.getByLabel('제목 필수').waitFor();
   for (const width of [320, 390, 1440]) {
@@ -129,7 +129,7 @@ try {
   await page.getByText('첫 번째 순간을 녹음해 보세요.').waitFor();
   await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
   await page.getByText('지금, 소리를 담고 있어요').waitFor();
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   const title = '비 오는 / 골목: 기억?';
   await page.getByLabel('제목 필수').fill(title);
@@ -219,7 +219,7 @@ try {
   for (const title of ['첫 번째 녹음', '두 번째 녹음']) {
     await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
     await page.getByText('지금, 소리를 담고 있어요').waitFor();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(3200);
     await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
     await page.getByLabel('제목 필수').fill(title);
     await page.getByRole('button', { name: '소리 저장하기' }).click();
@@ -371,7 +371,7 @@ try {
   assert.equal(data.version, 5); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모'); assert.equal(data.records[0].savedAt, data.records[0].createdAt);
   console.log('PASS: v1 -> v5 migration preserves metadata, audio bytes and local identity and adds savedAt');
   await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
-  await page.getByText('지금, 소리를 담고 있어요').waitFor(); await page.waitForTimeout(500);
+  await page.getByText('지금, 소리를 담고 있어요').waitFor(); await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await page.getByLabel('제목 필수').fill('캘린더 실제 녹음');
   await page.getByRole('button', { name: '소리 저장하기' }).click();
@@ -478,7 +478,7 @@ try {
   const record = async (title) => {
     await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
     await page.getByText('지금, 소리를 담고 있어요').waitFor();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(3200);
     await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
     await page.getByLabel('제목 필수').fill(title);
     await page.getByLabel('장소 선택').fill('기록한 순간의 장소');
@@ -527,6 +527,8 @@ try {
   assert.equal(await page.getByRole('button', { name: '녹음 종료', exact: true }).count(), 1);
   await page.clock.setFixedTime(new Date('2026-11-06T15:00:03.000Z'));
   await page.getByText('날짜가 바뀌었어요. 진행 중인 녹음은 저장을 완료한 날짜에 표시됩니다.', { exact: false }).waitFor();
+  await page.getByText('날짜가 바뀌었어요. 진행 중인 녹음은 시작한 날짜에 저장됩니다.', { exact: false }).waitFor();
+  await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await page.getByLabel('제목 필수').fill('자정을 넘긴 소리');
   assert.equal(await page.getByRole('button', { name: '다시 녹음하기', exact: true }).isDisabled(), true);
@@ -610,6 +612,7 @@ try {
   await page.evaluate(() => window.finishPermission());
   await page.waitForFunction(() => window.lateStream?.getTracks().every(track => track.readyState === 'ended'));
   assert.equal(await page.evaluate(() => window.activeStream.getTracks().every(track => track.readyState === 'live')), true);
+  await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await page.getByLabel('제목 필수').waitFor();
   console.log('PASS: cancel pending permission, retry, and release late permission stream without disrupting active recording');
@@ -625,7 +628,7 @@ try {
   await blocked.getByText('저장한 기록을 불러오지 못했어요.', { exact: false }).waitFor();
   await blocked.getByRole('button', { name: '녹음 시작', exact: true }).click();
   await blocked.getByText('지금, 소리를 담고 있어요').waitFor();
-  await blocked.waitForTimeout(400);
+  await blocked.waitForTimeout(3200);
   await blocked.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await blocked.getByLabel('제목 필수').fill('저장소 실패 검증');
   await blocked.getByRole('button', { name: '소리 저장하기' }).click();

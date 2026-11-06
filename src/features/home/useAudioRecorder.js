@@ -3,6 +3,7 @@ import { readStored } from '../../lib/usePersistentState.js';
 import { playRecordingCue } from '../../lib/sounds.js';
 
 const defaults={quality:'high',format:'webm',noiseReduction:true,micGain:75,startEndSound:true,maxDuration:30,keepOriginal:true};
+import { isSavableRecordingDuration, MIN_RECORDING_MESSAGE } from '../../lib/recordingPolicy.js';
 
 // 종료 API 자체가 실패하더라도 트랙/이벤트/타이머는 반드시 정리합니다.
 function disposeSession(active) {
@@ -127,6 +128,13 @@ export function useAudioRecorder({ canStart } = {}) {
         if (!isCurrent()) return;
         session.current = null;
         const duration = active.duration ?? (performance.now() - active.started) / 1000;
+        if (!isSavableRecordingDuration(duration)) {
+          setDraft(null);
+          setElapsed(duration);
+          setStatus('idle');
+          setError(MIN_RECORDING_MESSAGE);
+          return;
+        }
         const blob = new Blob(active.chunks, { type: active.recorder.mimeType || active.chunks[0]?.type });
         if (!blob.size) {
           setStatus('idle');

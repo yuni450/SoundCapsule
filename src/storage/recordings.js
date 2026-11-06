@@ -1,4 +1,5 @@
 import { createRecording, validateRecording } from '../models/recording.js';
+import { isSavableRecordingDuration, MIN_RECORDING_MESSAGE } from '../lib/recordingPolicy.js';
 
 const DB_NAME = 'soundcapsule';
 const DB_VERSION = 5;
@@ -107,6 +108,9 @@ async function transaction(stores, mode, run) {
 
 /** 실제 Blob과 공통 Recording을 하나의 트랜잭션으로 저장합니다. */
 export async function saveRecording({ blob, originalBlob = null, recordedAt, duration, title, locationName = '', latitude = null, longitude = null, country = '', city = '', memo = '', visibility = 'private', groupId = null, userId: requestedUserId }) {
+export async function saveRecording({ blob, recordedAt, duration, title, locationName = '', memo = '' }) {
+  // 신규 저장에만 적용하며 기존의 짧은 녹음 재생·편집·삭제에는 영향을 주지 않습니다.
+  if (!isSavableRecordingDuration(duration)) throw new Error(MIN_RECORDING_MESSAGE);
   if (!(blob instanceof Blob) || blob.size === 0) throw new Error('저장할 녹음 파일이 없어요.');
   const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
   if ((latitude !== null || longitude !== null) && !hasCoordinates) throw new Error('위도와 경도를 함께 확인해 주세요.');
