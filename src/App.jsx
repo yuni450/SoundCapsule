@@ -12,6 +12,20 @@ const PIANO_KEYS = [
   { day: '일', note: '시', colorName: '보라', color: 'var(--pastel-b)', bgTint: 'var(--pastel-b-bg)', keyIdx: 6, solfege: 'Ti', freq: '493.88Hz' },
 ];
 
+function PianoBlackKeys() {
+  return (
+    <div className="piano-black-keys" aria-hidden="true">
+      {[1, 2, 4, 5, 6].map((position) => (
+        <span
+          key={position}
+          className="piano-black-key"
+          style={{ left: `${(position / 7) * 100}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 const initialRecordings = [
   {
     id: 'rec-1',
@@ -890,7 +904,7 @@ export default function App() {
                               }}
                             />
 
-                            {/* 건반 상단 요일 & 계이름 */}
+                            {/* 검은 건반 아래에 요일 & 계이름 표시 */}
                             <div className="piano-key-labels">
                               <span className="key-day-tag">{keyInfo.day}</span>
                               <span className="key-note-tag">{keyInfo.note}</span>
@@ -905,6 +919,7 @@ export default function App() {
                         </div>
                       );
                     })}
+                    <PianoBlackKeys />
                   </div>
                 </div>
 
@@ -1470,6 +1485,7 @@ export default function App() {
                     <div className="key-progress-counter">4/4</div>
                   </div>
                 ))}
+                <PianoBlackKeys />
               </div>
             </div>
 
@@ -1542,6 +1558,7 @@ export default function App() {
                     </div>
                   );
                 })}
+                <PianoBlackKeys />
               </div>
             </div>
 

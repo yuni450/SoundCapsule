@@ -672,11 +672,34 @@ button, input, textarea, select {
 
 /* 건반 7개 가로 배치 */
 .piano-keys-row {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0;
   height: 240px;
   align-items: stretch;
+  border-top: 8px solid #27272a;
+}
+
+/* 도·레, 레·미 / 파·솔, 솔·라, 라·시 사이의 검은 건반 */
+.piano-black-keys {
+  position: absolute;
+  inset: 0 0 26px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.piano-black-key {
+  position: absolute;
+  top: 0;
+  width: 8.5%;
+  height: 56%;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #18181b, #3f3f46 45%, #18181b);
+  border: 1px solid #09090b;
+  border-radius: 0 0 4px 4px;
+  box-shadow: inset 0 -5px 0 #09090b, 0 4px 3px rgb(0 0 0 / 28%);
+  pointer-events: auto;
 }
 
 /* 개별 피아노 건반 */
@@ -690,9 +713,9 @@ button, input, textarea, select {
 .piano-key-body {
   width: 100%;
   flex: 1;
-  background: #fcfcfc;
-  border: 1.5px solid var(--border-default);
-  border-radius: 12px;
+  background: linear-gradient(#f4f4f5, #ffffff 35%);
+  border: 1px solid #a1a1aa;
+  border-radius: 0 0 5px 5px;
   position: relative;
   overflow: hidden;
   cursor: pointer;
@@ -710,12 +733,16 @@ button, input, textarea, select {
 }
 
 .piano-key-body.unlocked {
-  border-color: #cbd5e1;
+  border-color: #a1a1aa;
+}
+
+.piano-key-body:focus-visible {
+  outline: 2px solid var(--action-primary);
+  outline-offset: -4px;
 }
 
 .piano-key-body.locked {
   background: #f9f9fb;
-  opacity: 0.85;
 }
 
 /* 건반 내부에서 아래에서 위로 차오르는 파스텔 컬러 수직 필 */
@@ -734,10 +761,10 @@ button, input, textarea, select {
   opacity: 0.9;
 }
 
-/* 건반 상단 요일 & 계이름 레이블 */
+/* 검은 건반 아래의 요일 & 계이름 레이블 */
 .piano-key-labels {
   position: absolute;
-  top: 10px;
+  bottom: 12px;
   left: 0;
   right: 0;
   text-align: center;
