@@ -12,6 +12,8 @@
 .sc-cal-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 2px; color: var(--cal-green); }
 .sc-cal-panel h1 { font-size: clamp(25px, 5vw, 34px); margin: 12px 0; font-weight: 500; letter-spacing: -1px; }
 .sc-cal-muted { font-size: 12px; color: var(--cal-muted); overflow-wrap: anywhere; }
+.sc-cal-location-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sc-cal-location-row > div { display: flex; flex-shrink: 0; gap: 10px; }
 .sc-cal-month { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 32px; }
 .sc-cal-month h2 { font-size: 21px; font-weight: 500; }
 .sc-cal-month button { width: 44px; border: 1px solid var(--cal-border); background: var(--cal-card); border-radius: 50%; font-size: 28px; color: var(--cal-green); line-height: 1; }
@@ -44,6 +46,7 @@
 .sc-cal-memo-actions span { font-size: 11px; color: var(--cal-muted); }
 .sc-cal-memo-actions button { padding: 8px 14px; border: 0; border-radius: 8px; color: white; background: var(--cal-green); font-size: 13px; }
 .sc-cal-photos-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 20px; }
+.sc-cal-sharing{margin-top:18px;padding:14px;border:1px solid var(--cal-border);border-radius:10px;background:#faf8f4}.sc-cal-sharing h4{margin:0 0 10px;font-size:13px}.sc-cal-sharing>div{display:flex;flex-wrap:wrap;gap:8px}.sc-cal-sharing select,.sc-cal-sharing button{min-height:36px;padding:0 10px;border:1px solid var(--cal-border);border-radius:8px;background:#fff;font-size:12px}.sc-cal-sharing button{color:var(--cal-green);font-weight:600}
 .sc-cal-photos-heading h4 { font-size: 13px; margin: 0; font-weight: 600; }
 .sc-cal-file { display: none; }
 .sc-cal-photos { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; }
@@ -60,3 +63,4 @@
 .sc-cal-notice { background: #e5eddf; color: #285442; }
 .sc-cal-midnight { border-radius: 10px; padding: 12px; background: #e5eddf; color: #285442; font-size: 13px; }
 @media (min-width: 850px) { .sc-cal-main { grid-template-columns: 1fr 1fr; gap: 64px; padding: 52px 28px; align-items: start; } .sc-cal-panel { position: sticky; top: 24px; } .sc-cal-day { border-top: 0; padding-top: 16px; } }
+@media (max-width: 520px) { .sc-cal-location-row { align-items: flex-start; flex-direction: column; } }

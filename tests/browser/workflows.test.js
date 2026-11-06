@@ -368,8 +368,8 @@ try {
     };
   }));
   let data = await snapshot();
-  assert.equal(data.version, 2); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모');
-  console.log('PASS: v1 -> v2 migration preserves metadata, audio bytes and local identity');
+  assert.equal(data.version, 5); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모'); assert.equal(data.records[0].savedAt, data.records[0].createdAt);
+  console.log('PASS: v1 -> v5 migration preserves metadata, audio bytes and local identity and adds savedAt');
   await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
   await page.getByText('지금, 소리를 담고 있어요').waitFor(); await page.waitForTimeout(500);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
@@ -490,10 +490,11 @@ try {
   await page.getByRole('heading', { name: '홈 시작 시각', exact: true }).waitFor();
   const preserved = (await recordings())[0];
   assert.equal(preserved.recordedAt, '2026-11-06T05:00:00.000Z');
+  assert.equal(preserved.savedAt, '2026-11-06T06:00:00.000Z');
   assert.equal(preserved.createdAt, '2026-11-06T06:00:00.000Z');
   assert.equal(preserved.location.name, '기록한 순간의 장소');
   const localDisplay = await page.locator('.sc-saved-card time').innerText();
-  assert(localDisplay.includes('2:00:00'), localDisplay);
+  assert(localDisplay.includes('3:00:00'), localDisplay);
   await page.getByRole('button', { name: '캘린더', exact: true }).click();
   await page.getByText('1개의 소리', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: '녹음 시작', exact: true }).count(), 1);
@@ -515,7 +516,7 @@ try {
   await page.getByRole('button', { name: '홈 · 녹음', exact: true }).click();
   await page.getByText('2개의 순간', { exact: true }).waitFor();
   assert.deepEqual((await recordings()).find(record => record.id === preserved.id), preserved);
-  console.log('PASS: shared home/calendar recording, no date/time inputs, actual start ISO and local display, past/future blocked, home/calendar immediate sync, existing record preserved');
+  console.log('PASS: shared home/calendar recording, automatic savedAt and local display, past/future blocked, home/calendar immediate sync, existing record preserved');
 
   await page.getByRole('button', { name: '캘린더', exact: true }).click();
   await page.clock.setFixedTime(new Date('2026-11-06T14:59:58.000Z'));
@@ -525,7 +526,7 @@ try {
   await page.getByRole('button', { name: /^2026년 11월 5일,/ }).click();
   assert.equal(await page.getByRole('button', { name: '녹음 종료', exact: true }).count(), 1);
   await page.clock.setFixedTime(new Date('2026-11-06T15:00:03.000Z'));
-  await page.getByText('날짜가 바뀌었어요. 진행 중인 녹음은 시작한 날짜에 저장됩니다.', { exact: false }).waitFor();
+  await page.getByText('날짜가 바뀌었어요. 진행 중인 녹음은 저장을 완료한 날짜에 표시됩니다.', { exact: false }).waitFor();
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await page.getByLabel('제목 필수').fill('자정을 넘긴 소리');
   assert.equal(await page.getByRole('button', { name: '다시 녹음하기', exact: true }).isDisabled(), true);
@@ -533,20 +534,21 @@ try {
   await page.clock.setFixedTime(new Date('2026-11-06T15:10:00.000Z'));
   await page.getByRole('button', { name: '소리 저장하기', exact: true }).click();
   await page.getByRole('heading', { name: '자정을 넘긴 소리', exact: true }).waitFor();
-  await page.getByText('3개의 소리', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: '녹음 시작', exact: true }).count(), 0);
+  await page.getByText('1개의 소리', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: '녹음 시작', exact: true }).count(), 1);
   const midnightRecord = (await recordings()).find(record => record.title === '자정을 넘긴 소리');
   assert.equal(midnightRecord.recordedAt, '2026-11-06T14:59:58.000Z');
+  assert.equal(midnightRecord.savedAt, '2026-11-06T15:10:00.000Z');
   assert.equal(midnightRecord.createdAt, '2026-11-06T15:10:00.000Z');
   await page.getByRole('button', { name: '오늘', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: '녹음 시작', exact: true }).count(), 1);
-  await page.getByText('0개의 소리', { exact: true }).waitFor();
-  assert.equal(await page.locator('.sc-cal-grid [aria-current="date"] .sc-cal-dot').count(), 0);
+  await page.getByText('1개의 소리', { exact: true }).waitFor();
+  assert.equal(await page.locator('.sc-cal-grid [aria-current="date"] .sc-cal-dot').count(), 1);
   await page.getByRole('button', { name: /^2026년 11월 6일,/ }).click();
-  await page.getByText('3개의 소리', { exact: true }).waitFor();
+  await page.getByText('2개의 소리', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: '녹음 시작', exact: true }).count(), 0);
   assert.deepEqual((await recordings()).find(record => record.id === preserved.id), preserved);
-  console.log('PASS: recording spanning local midnight stays on start date; previous date cannot start/retry; new today is recordable; unsaved navigation cancellation');
+  console.log('PASS: recording spanning local midnight is shown on save date; previous date cannot start/retry; new today is recordable; unsaved navigation cancellation');
   for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.getByRole('button', { name: '오늘', exact: true }).click();

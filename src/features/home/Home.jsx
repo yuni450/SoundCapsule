@@ -70,7 +70,7 @@ function SavedRecording({ recording, onDelete }) {
         <RecordingMenu title={recording.title} busy={deleting || downloading} onDownload={download} onDelete={remove} />
       </div>
       <p className="sc-meta">
-        <time dateTime={recording.recordedAt}>{new Date(recording.recordedAt).toLocaleString('ko-KR')}</time>
+        <time dateTime={recording.savedAt || recording.recordedAt}>저장 {new Date(recording.savedAt || recording.recordedAt).toLocaleString('ko-KR')}</time>
         {recording.location.name && ` · ${recording.location.name}`}
       </p>
       {recording.memo && <p className="sc-memo">{recording.memo}</p>}
@@ -85,7 +85,7 @@ function SavedRecording({ recording, onDelete }) {
   );
 }
 
-export default function Home({ onActivityChange }) {
+export default function Home({ onActivityChange,groups=[] }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState('');
@@ -117,7 +117,7 @@ export default function Home({ onActivityChange }) {
   return <div className="sc-home">
     <header className="sc-header"><a href="#home" className="sc-brand">SoundCapsule<span aria-hidden="true"> ✳</span></a><span className="sc-header-note">나의 소리 일기</span></header>
     <main id="home" className="sc-main">
-      <RecordingComposer onActivityChange={onActivityChange} />
+      <RecordingComposer onActivityChange={onActivityChange} groups={groups} />
         <section className="sc-library" aria-labelledby="library-title">
           <div className="sc-section-heading"><h2 id="library-title">담아둔 소리</h2><span>{records.length}개의 순간</span></div>
           <p className="sc-storage-note">이 기기의 현재 브라우저에 나만 볼 수 있도록 저장돼요.<br />브라우저 데이터를 지우면 녹음도 삭제됩니다.</p>

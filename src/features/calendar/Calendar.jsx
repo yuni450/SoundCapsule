@@ -7,7 +7,7 @@ import './calendar.css';
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
-export default function Calendar({ onActivityChange }) {
+export default function Calendar({ onActivityChange, appGroups=[] }) {
   const [today, setToday] = useState(() => localDateKey(new Date()));
   const [selected, setSelected] = useState(() => localDateKey(new Date()));
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12));
@@ -28,8 +28,7 @@ export default function Calendar({ onActivityChange }) {
     updateActivity('calendar-recorder', { dirty: state.hasUnsaved, busy: state.busy });
   }, [updateActivity]);
   const onRecorded = (recording) => {
-    // 선택된 칸이나 저장 시각이 아니라 실제 녹음 시작 시각으로 이동합니다.
-    const date = new Date(recording.recordedAt);
+    const date = new Date(recording.savedAt || recording.recordedAt);
     setSelected(localDateKey(date));
     setMonth(new Date(date.getFullYear(), date.getMonth(), 1, 12));
   };
@@ -96,14 +95,14 @@ export default function Calendar({ onActivityChange }) {
       <section className="sc-cal-day" aria-labelledby="selected-date-title">
         <div className="sc-cal-day-heading"><h2 id="selected-date-title">{selectedLabel}</h2><span>{selectedRecords.length}개의 소리</span></div>
         {(selected === today || recorderActivity.hasUnsaved) ? <>
-          {selected !== today && <p className="sc-cal-midnight" role="status">날짜가 바뀌었어요. 진행 중인 녹음은 시작한 날짜에 저장됩니다. 새 녹음은 오늘 날짜에서 시작해 주세요.</p>}
-          <RecordingComposer key={selected} compact onActivityChange={updateRecorderActivity} onSaved={onRecorded}
+          {selected !== today && <p className="sc-cal-midnight" role="status">날짜가 바뀌었어요. 진행 중인 녹음은 저장을 완료한 날짜에 표시됩니다. 새 녹음은 오늘 날짜에서 시작해 주세요.</p>}
+          <RecordingComposer key={selected} compact onActivityChange={updateRecorderActivity} onSaved={onRecorded} groups={appGroups}
             canStart={() => selected === localDateKey(new Date())} startDisabled={selected !== today} />
         </> : <p className="sc-cal-muted">{selected < today ? '이날의 소리는 다시 꺼내 들을 수 있어요.' : '새로운 소리는 오늘 날짜에서만 담을 수 있어요.'}</p>}
         {loading && <p role="status">기억을 불러오는 중…</p>}
         {error && <div role="alert" className="sc-cal-error">{error} <button type="button" onClick={() => reloadRef.current()}>다시 불러오기</button></div>}
         {!loading && !error && !selectedRecords.length && <div className="sc-cal-empty"><span aria-hidden="true">♪</span><p>이날은 담아둔 소리가 없어요.</p><p>{selected === today ? '위에서 지금의 소리를 남겨보세요.' : '새 녹음은 오늘 날짜에서만 남길 수 있어요.'}</p></div>}
-        <ul className="sc-cal-records">{selectedRecords.map((recording) => <RecordingDetails key={recording.id} recording={recording} onActivityChange={updateActivity} />)}</ul>
+        <ul className="sc-cal-records">{selectedRecords.map((recording) => <RecordingDetails key={recording.id} recording={recording} groups={appGroups} onActivityChange={updateActivity} />)}</ul>
       </section>
     </main>
   </div>;

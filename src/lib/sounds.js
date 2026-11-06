@@ -1,0 +1,6 @@
+function playSequence(notes){
+  const AudioContext=globalThis.AudioContext||globalThis.webkitAudioContext;if(!AudioContext)return;
+  try{const context=new AudioContext();let at=context.currentTime+.01;for(const {frequency,duration=.1,gain=.035} of notes){const oscillator=context.createOscillator(),volume=context.createGain();oscillator.type='sine';oscillator.frequency.value=frequency;volume.gain.setValueAtTime(0,at);volume.gain.linearRampToValueAtTime(gain,at+.015);volume.gain.exponentialRampToValueAtTime(.0001,at+duration);oscillator.connect(volume);volume.connect(context.destination);oscillator.start(at);oscillator.stop(at+duration);at+=duration*.7}setTimeout(()=>context.close().catch?.(()=>{}),Math.ceil((at-context.currentTime+.2)*1000))}catch{/* 소리를 지원하지 않아도 동작은 계속합니다. */}
+}
+export function playNotificationSound(name){if(name==='none')return;if(name==='warm')playSequence([{frequency:523,duration:.18},{frequency:659,duration:.2},{frequency:784,duration:.28}]);else playSequence([{frequency:880,duration:.08,gain:.025},{frequency:1175,duration:.16,gain:.025}])}
+export function playRecordingCue(kind){playSequence(kind==='start'?[{frequency:660,duration:.08},{frequency:880,duration:.12}]:[{frequency:880,duration:.08},{frequency:660,duration:.12}])}
