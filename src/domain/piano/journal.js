@@ -9,8 +9,8 @@ export function createSaveIntent(recording) {
 }
 
 // IDB 완료 이벤트에서 한 번만 캡처. 후속 DB 쓰기 실패에도 날짜를 잃지 않도록 동기 저널로 보완합니다.
-export function captureSavedRecording(recording) {
-  const event = createCompletionEvent(recording, new Date().toISOString(), Intl.DateTimeFormat().resolvedOptions().timeZone);
+export function captureSavedRecording(recording, savedAtOverride) {
+  const event = createCompletionEvent(recording, savedAtOverride || new Date().toISOString(), Intl.DateTimeFormat().resolvedOptions().timeZone);
   memory.set(event.eventId, event);
   try { globalThis.localStorage?.setItem(key(event.eventId), JSON.stringify(event)); } catch { /* IDB 또는 메모리 재시도 */ }
   return event;

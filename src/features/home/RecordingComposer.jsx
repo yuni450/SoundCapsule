@@ -8,7 +8,11 @@ import AudioPlayer from './AudioPlayer.jsx';
 import { formatDuration } from './formatDuration.js';
 import './home.css';
 
-// 날짜/시간 입력은 제공하지 않습니다. recordedAt은 녹음 훅의 실제 시작 시각만 사용합니다.
+// DEMO ONLY: 시연이 끝나면 demoBackdate 상태와 sc-demo-date 블록, demoSavedAt 전달을 함께 제거합니다.
+function toLocalDateTimeInput(date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 export default function RecordingComposer({ compact = false, canStart, startDisabled = false, onActivityChange, onSaved,groups=[] }) {
   const recorder = useAudioRecorder({ canStart });
   const [title, setTitle] = useState('');
@@ -23,6 +27,8 @@ export default function RecordingComposer({ compact = false, canStart, startDisa
   const [visibility,setVisibility]=useState(()=>['private','friends','group'].includes(initialSound.visibility)?initialSound.visibility:'private');
   const [groupId,setGroupId]=useState(()=>String(initialSound.defaultGroupId||groups[0]?.id||''));
   const [memo, setMemo] = useState('');
+  const [demoBackdate,setDemoBackdate]=useState(false);
+  const [demoDateTime,setDemoDateTime]=useState(()=>toLocalDateTimeInput(new Date(Date.now()-7*24*60*60*1000)));
   const [saveError, setSaveError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
@@ -66,9 +72,16 @@ export default function RecordingComposer({ compact = false, canStart, startDisa
         return;
       }
       if(visibility==='group'&&!groupId){setSaveError('공개할 그룹을 선택해 주세요.');return}
-      const saved = await saveRecording({ ...recorder.draft, title, locationName, latitude, longitude, country:locationDetails.country,city:locationDetails.city,memo,visibility,groupId:visibility==='group'?groupId:null });
+      let demoSavedAt=null;
+      if(demoBackdate){
+        const selected=new Date(demoDateTime);
+        if(!demoDateTime||Number.isNaN(selected.getTime())){setSaveError('시연용 기록 날짜와 시간을 확인해 주세요.');return}
+        if(selected.getTime()>Date.now()){setSaveError('시연용 기록은 현재보다 과거 시각만 선택할 수 있어요.');return}
+        demoSavedAt=selected.toISOString();
+      }
+      const saved = await saveRecording({ ...recorder.draft, recordedAt:demoSavedAt||recorder.draft.recordedAt, demoSavedAt, title, locationName, latitude, longitude, country:locationDetails.country,city:locationDetails.city,memo,visibility,groupId:visibility==='group'?groupId:null });
       recorder.reset();
-      setTitle(''); setLocationName(''); setMemo(''); setIncludeLocation(false); setCoordinates({ latitude:'',longitude:'' }); setLocationDetails({country:'',city:''});setLocationStatus('');
+      setTitle(''); setLocationName(''); setMemo(''); setIncludeLocation(false); setCoordinates({ latitude:'',longitude:'' }); setLocationDetails({country:'',city:''});setLocationStatus('');setDemoBackdate(false);
       setNotice('이 브라우저에 소중한 소리를 저장했어요.');
       onSaved?.(saved);
     } catch (error) {
@@ -138,6 +151,10 @@ export default function RecordingComposer({ compact = false, canStart, startDisa
               <fieldset disabled={saving}>
                 <label htmlFor="recording-title">제목 <span className="sc-required">필수</span></label>
                 <input ref={titleRef} id="recording-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="어떤 소리인가요?" required maxLength={100} />
+                <div className="sc-demo-date">
+                  <label className="sc-location-toggle"><input type="checkbox" checked={demoBackdate} onChange={(event)=>setDemoBackdate(event.target.checked)}/><span>시연용 과거 날짜 지정</span><em>DEMO</em></label>
+                  {demoBackdate&&<><label htmlFor="recording-demo-date">기록 날짜와 시간 <span>시연 종료 후 삭제 예정</span></label><input id="recording-demo-date" type="datetime-local" value={demoDateTime} max={toLocalDateTimeInput(new Date())} onChange={event=>setDemoDateTime(event.target.value)} required/><p>선택한 날짜가 캘린더와 음표 진행도에 반영돼요.</p></>}
+                </div>
                 <label htmlFor="recording-place">장소 <span>선택</span></label>
                 <input id="recording-place" value={locationName} onChange={(event) => setLocationName(event.target.value)} placeholder="이 소리를 만난 곳" maxLength={200} />
                 <label className="sc-location-toggle"><input type="checkbox" checked={includeLocation} onChange={(event)=>{setIncludeLocation(event.target.checked);setLocationStatus('')}}/><span>지도에 위치 표시</span></label>

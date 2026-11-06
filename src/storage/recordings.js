@@ -125,12 +125,14 @@ async function transaction(stores, mode, run) {
 }
 
 /** 실제 Blob과 공통 Recording을 하나의 트랜잭션으로 저장합니다. */
-export async function saveRecording({ blob, originalBlob = null, recordedAt, duration, title, locationName = '', latitude = null, longitude = null, country = '', city = '', memo = '', visibility = 'private', groupId = null, userId: requestedUserId }) {
+export async function saveRecording({ blob, originalBlob = null, recordedAt, demoSavedAt = null, duration, title, locationName = '', latitude = null, longitude = null, country = '', city = '', memo = '', visibility = 'private', groupId = null, userId: requestedUserId }) {
   if (!isSavableRecordingDuration(duration)) throw new Error(MIN_RECORDING_MESSAGE);
   if (!(blob instanceof Blob) || blob.size === 0) throw new Error('저장할 녹음 파일이 없어요.');
   const viewer=await requireViewer();
   const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
   if ((latitude !== null || longitude !== null) && !hasCoordinates) throw new Error('위도와 경도를 함께 확인해 주세요.');
+  const demoTime=demoSavedAt===null?null:new Date(demoSavedAt);
+  if(demoTime&&(Number.isNaN(demoTime.getTime())||demoTime.getTime()>Date.now()))throw new Error('시연용 기록은 현재보다 과거 시각만 선택할 수 있어요.');
   const recording = await transaction(['recordings', 'audio', 'originalAudio', 'settings', 'pianoEvents'], 'readwrite', (tx, done, fail) => {
     const settings = tx.objectStore('settings');
     const identity = settings.get('localUserId');
@@ -142,7 +144,7 @@ export async function saveRecording({ blob, originalBlob = null, recordedAt, dur
         if (viewer.local && identity.result !== userId) settings.put(userId, 'localUserId');
         else if (!identity.result) settings.add(userId, 'localUserId');
         const id = crypto.randomUUID();
-        const savedAt = new Date().toISOString();
+        const savedAt = demoTime ? demoTime.toISOString() : new Date().toISOString();
         const recording = createRecording({
           id, userId, title: title.trim(), recordedAt, savedAt, duration,
           audioUrl: `indexeddb://soundcapsule/audio/${id}`,
@@ -159,7 +161,7 @@ export async function saveRecording({ blob, originalBlob = null, recordedAt, dur
       }
     };
   });
-  const savedEvent = captureSavedRecording(recording);
+  const savedEvent = captureSavedRecording(recording, demoTime ? recording.savedAt : undefined);
   try { await recordSuccessfulRecordingDay(savedEvent); } catch { /* 영속 이벤트를 다음 조회에서 재시도합니다. */ }
   return recording;
 }
