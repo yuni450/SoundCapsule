@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
-const env = { ...process.env, NO_COLOR: '1' };
+const env = { ...process.env, NO_COLOR: '1', VITE_E2E_BYPASS_AUTH: '1' };
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5174'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let runner;
 let log = '';

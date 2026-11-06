@@ -62,7 +62,6 @@ await send('Emulation.setDeviceMetricsOverride', { width: viewportWidth, height:
 await evaluate(`localStorage.clear(); setTimeout(() => location.reload(), 0); true`);
 await sleep(700);
 const authScreen = await evaluate(`document.body.innerText.includes('계정 만들기')`);
-
 await evaluate(`(() => {
   localStorage.setItem('soundcapsule:users', JSON.stringify([{id:'debug.user',name:'디버그',passwordHash:'test',role:'member'}]));
   localStorage.setItem('soundcapsule:session', JSON.stringify({id:'debug.user',name:'디버그',role:'member'}));
@@ -70,8 +69,13 @@ await evaluate(`(() => {
   return true;
 })()`);
 await sleep(900);
-
+const homeScreen = await evaluate(`document.body.innerText.includes('첫 번째 순간을 녹음해 보세요.') && Boolean(document.querySelector('.sc-home'))`);
 const appShell = await evaluate(`Boolean(document.querySelector('.shell'))`);
+await evaluate(`Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === '캘린더' || button.textContent.trim() === '캘린더')?.click()`);
+await sleep(300);
+const calendarScreen = await evaluate(`Boolean(document.querySelector('.sc-calendar')) && document.body.innerText.includes('소리로 돌아보는 하루')`);
+await evaluate(`Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === '친구' || button.textContent.trim() === '친구')?.click()`);
+await sleep(300);
 const friendsScreen = await evaluate(`document.body.innerText.includes('받은 요청') && document.body.innerText.includes('내 친구')`);
 
 await evaluate(`Array.from(document.querySelectorAll('button')).find((button) => button.textContent.trim() === '지도')?.click()`);
@@ -110,7 +114,9 @@ const workerReady = await evaluate(`Promise.race([navigator.serviceWorker?.ready
 
 const result = {
   authScreen,
+  homeScreen,
   appShell,
+  calendarScreen,
   friendsScreen,
   mapScreen,
   googleMapLoaded,
