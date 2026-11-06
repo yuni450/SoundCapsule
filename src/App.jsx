@@ -169,9 +169,8 @@ export default function App() {
   const [calendarMonth, setCalendarMonth] = useState(11);
   const [selectedDate, setSelectedDate] = useState('2026-11-06');
 
-  // 🎵 11월 요일별 피아노 건반 녹음 횟수 상태: [월, 화, 수, 목, 금, 토, 일]
-  // 기본 데이터: 월(2), 화(4), 수(1), 목(3), 금(2), 토(0), 일(1)
-  const [pianoCounts, setPianoCounts] = useState([2, 4, 1, 3, 2, 0, 1]);
+  // 🎵 11월 첫째 주 요일별 진행도: 월~토 1단계, 일요일 0단계
+  const [pianoCounts, setPianoCounts] = useState([1, 1, 1, 1, 1, 1, 0]);
   const [activePianoToast, setActivePianoToast] = useState(null);
   const [pressedKeyIndex, setPressedKeyIndex] = useState(null);
 
