@@ -368,6 +368,8 @@ try {
     };
   }));
   let data = await snapshot();
+  assert.equal(data.version, 4); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모');
+  console.log('PASS: v1 -> v4 migration preserves metadata, audio bytes and local identity');
   assert.equal(data.version, 5); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모'); assert.equal(data.records[0].savedAt, data.records[0].createdAt);
   console.log('PASS: v1 -> v5 migration preserves metadata, audio bytes and local identity and adds savedAt');
   await page.getByRole('button', { name: '녹음 시작', exact: true }).click();

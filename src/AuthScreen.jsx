@@ -45,6 +45,6 @@ export default function AuthScreen({ users, setUsers, onLogin }) {
     </form>
     {mode === 'login' && <button className="auth-switch" onClick={() => { setMode('reset'); setError(''); setForm({ ...form, password: '' }); }}>비밀번호를 잊으셨나요?</button>}
     <button className="auth-switch" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>{mode === 'login' ? '처음인가요? 계정 만들기' : '이미 계정이 있나요? 로그인'}</button>
-    <small>이 MVP의 계정과 기록은 현재 브라우저에 안전하게 저장됩니다.</small>
+    <small>계정과 기록은 이 브라우저에만 저장됩니다. 서버 인증과 기기 간 공유는 지원하지 않습니다.</small>
   </section></main>;
 }
