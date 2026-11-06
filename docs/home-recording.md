@@ -22,6 +22,8 @@ PC에서는 터미널의 localhost 주소를 엽니다. 실제 마이크 사용 
 ## 파일 역할
 
 - `src/features/home/Home.jsx`: 녹음 UI, 정보 입력, 저장과 저장된 기록 재생
+- `src/features/home/RecordingComposer.jsx`: 홈·캘린더가 함께 사용하는 녹음/입력/저장 컴포넌트
+- `src/features/home/formatDuration.js`: 녹음 시간 표시 공통 함수
 - `src/features/home/useAudioRecorder.js`: 마이크 권한, MediaRecorder, 타이머, 리소스 정리
 - `src/features/home/AudioPlayer.jsx`: Blob의 임시 재생 URL 생성과 해제
 - `src/features/home/home.css`: 홈 전용 스타일. `.sc-home`의 CSS 변수로 색상 변경
@@ -32,11 +34,12 @@ PC에서는 터미널의 localhost 주소를 엽니다. 실제 마이크 사용 
 ## 저장 계약
 
 기존 `src/models/recording.js`는 변경하지 않습니다.
-IndexedDB `soundcapsule` 버전 1에 다음 객체 저장소를 사용합니다.
+IndexedDB `soundcapsule` 버전 2에 다음 객체 저장소를 사용합니다.
 
 - `recordings`: 공통 Recording 객체. `id`가 키
 - `audio`: 실제 오디오 Blob. Recording의 `id`가 키
 - `settings`: 브라우저 로컬 소유자 ID. 로그인 계정은 아님
+- `photos`: 캘린더에서 첨부한 이미지 Blob. 버전 1의 기존 데이터는 업그레이드 시 보존
 
 파일과 정보는 동일한 트랜잭션에서 추가합니다. 저장 실패 시 둘 다 취소되고,
 화면의 녹음 초안은 유지되어 다시 저장할 수 있습니다.
@@ -54,6 +57,9 @@ IndexedDB `soundcapsule` 버전 1에 다음 객체 저장소를 사용합니다.
 재생 중인 카드를 삭제하면 플레이어가 제거되고 임시 재생 URL도 해제됩니다.
 현재 공개 범위는 `private`, 그룹은 null, 사진은 빈 배열,
 좌표는 둘 다 null입니다. 장소명만 입력받으며 위치 권한은 요청하지 않습니다.
+새 녹음의 `recordedAt`은 실제 녹음 시작 순간의 ISO 타임스탬프입니다.
+사용자에게는 현지 시간으로 읽기 전용 표시하며, 저장 시각이나 캘린더 선택 날짜로 덮어쓰지 않습니다.
+홈과 캘린더가 같은 녹음 컴포넌트를 사용하며, 캘린더의 과거/미래 날짜에서는 새 녹음을 시작할 수 없습니다.
 
 `audioUrl`은 `indexeddb://soundcapsule/audio/<id>` 형식의 식별자입니다.
 브라우저가 직접 재생할 URL은 아니며, 저장된 Blob을 읽어 임시 URL로 바꿔야 합니다.

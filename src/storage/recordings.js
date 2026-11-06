@@ -1,7 +1,37 @@
-import { createRecording } from '../models/recording.js';
+import { createRecording, validateRecording } from '../models/recording.js';
 
 const DB_NAME = 'soundcapsule';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+const PHOTO_PREFIX = 'indexeddb://soundcapsule/photos/';
+const CHANGE_EVENT = 'soundcapsule:recordings-changed';
+
+function notifyChanges() {
+  globalThis.window?.dispatchEvent(new Event(CHANGE_EVENT));
+  if (globalThis.window && globalThis.BroadcastChannel) {
+    // 알림을 지원하지 않는 환경에서도 완료된 저장 자체는 성공으로 처리합니다.
+    try {
+      const channel = new BroadcastChannel(CHANGE_EVENT);
+      channel.postMessage('changed');
+      channel.close();
+    } catch { /* 화면 복귀 시 재조회로 보완합니다. */ }
+  }
+}
+
+/** 같은 탭/다른 탭의 저장 변경과 화면 복귀를 구독합니다. 반환 함수로 해제하세요. */
+export function subscribeRecordings(callback) {
+  window.addEventListener(CHANGE_EVENT, callback);
+  window.addEventListener('focus', callback);
+  const visible = () => { if (document.visibilityState === 'visible') callback(); };
+  document.addEventListener('visibilitychange', visible);
+  const channel = globalThis.BroadcastChannel ? new BroadcastChannel(CHANGE_EVENT) : null;
+  if (channel) channel.onmessage = callback;
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, callback);
+    window.removeEventListener('focus', callback);
+    document.removeEventListener('visibilitychange', visible);
+    channel?.close();
+  };
+}
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -13,9 +43,10 @@ function openDatabase() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      db.createObjectStore('recordings', { keyPath: 'id' });
-      db.createObjectStore('audio');
-      db.createObjectStore('settings');
+      if (!db.objectStoreNames.contains('recordings')) db.createObjectStore('recordings', { keyPath: 'id' });
+      for (const name of ['audio', 'settings', 'photos']) {
+        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+      }
     };
     request.onerror = () => reject(request.error);
     request.onblocked = () => {
@@ -35,7 +66,7 @@ function openDatabase() {
 async function transaction(stores, mode, run) {
   const db = await openDatabase();
   try {
-    return await new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       const tx = db.transaction(stores, mode);
       let result;
       let failure;
@@ -52,6 +83,8 @@ async function transaction(stores, mode, run) {
         tx.abort();
       }
     });
+    if (mode === 'readwrite') notifyChanges();
+    return result;
   } finally {
     db.close();
   }
@@ -106,8 +139,68 @@ export function deleteRecording(id) {
   if (typeof id !== 'string' || !id.trim()) {
     return Promise.reject(new TypeError('삭제할 녹음 ID가 필요합니다.'));
   }
-  return transaction(['recordings', 'audio'], 'readwrite', (tx) => {
-    tx.objectStore('recordings').delete(id);
-    tx.objectStore('audio').delete(id);
+  return transaction(['recordings', 'audio', 'photos'], 'readwrite', (tx, done, fail) => {
+    const records = tx.objectStore('recordings');
+    records.get(id).onsuccess = ({ target }) => {
+      try {
+        for (const url of target.result?.photoUrls ?? []) {
+          if (url.startsWith(PHOTO_PREFIX)) tx.objectStore('photos').delete(url.slice(PHOTO_PREFIX.length));
+        }
+        records.delete(id);
+        tx.objectStore('audio').delete(id);
+      } catch (error) { fail(error); }
+    };
+  });
+}
+
+function editRecording(id, stores, edit) {
+  return transaction(['recordings', ...stores], 'readwrite', (tx, done, fail) => {
+    const records = tx.objectStore('recordings');
+    records.get(id).onsuccess = ({ target }) => {
+      try {
+        if (!target.result) throw new Error('녹음이 삭제되었거나 존재하지 않아요.');
+        const updated = edit(target.result, tx);
+        updated.updatedAt = new Date().toISOString();
+        const validation = validateRecording(updated);
+        if (!validation.valid) throw new Error(Object.values(validation.errors).join(' '));
+        records.put(updated);
+        done(updated);
+      } catch (error) { fail(error); }
+    };
+  });
+}
+
+export function updateRecordingMemo(id, memo) {
+  if (typeof memo !== 'string' || memo.length > 500) return Promise.reject(new Error('메모는 500자 이내로 입력해 주세요.'));
+  return editRecording(id, [], (recording) => ({ ...recording, memo: memo.trim() }));
+}
+
+export function addRecordingPhotos(id, files) {
+  const photos = Array.from(files);
+  if (!photos.length || photos.some((file) => !(file instanceof Blob) || !file.type.startsWith('image/') || file.type === 'image/svg+xml' || !file.size || file.size > 10 * 1024 * 1024)) {
+    return Promise.reject(new Error('사진은 SVG를 제외한 이미지 파일로, 한 장당 10MB 이하로 선택해 주세요.'));
+  }
+  return editRecording(id, ['photos'], (recording, tx) => {
+    const photoUrls = photos.map((file) => {
+      const photoId = crypto.randomUUID();
+      tx.objectStore('photos').add(file, photoId);
+      return `${PHOTO_PREFIX}${photoId}`;
+    });
+    return { ...recording, photoUrls: [...recording.photoUrls, ...photoUrls] };
+  });
+}
+
+export function getRecordingPhoto(url) {
+  if (typeof url !== 'string' || !url.startsWith(PHOTO_PREFIX)) return Promise.resolve(null);
+  return transaction(['photos'], 'readonly', (tx, done) => {
+    tx.objectStore('photos').get(url.slice(PHOTO_PREFIX.length)).onsuccess = ({ target }) => done(target.result ?? null);
+  });
+}
+
+export function deleteRecordingPhoto(id, url) {
+  return editRecording(id, ['photos'], (recording, tx) => {
+    if (!recording.photoUrls.includes(url)) throw new Error('이 녹음에 첨부된 사진이 아니에요.');
+    if (url.startsWith(PHOTO_PREFIX)) tx.objectStore('photos').delete(url.slice(PHOTO_PREFIX.length));
+    return { ...recording, photoUrls: recording.photoUrls.filter((photo) => photo !== url) };
   });
 }

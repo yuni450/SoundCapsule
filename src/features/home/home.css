@@ -76,6 +76,14 @@
 .sc-error { color: #8c332b; background: #fbebe5; }
 .sc-success { color: #285442; background: #e5eddf; }
 .sc-footer { text-align: center; padding: 24px 20px 32px; color: var(--sc-muted); font-size: 11px; letter-spacing: 1px; }
+.sc-home.sc-inline-recorder { min-height: 0; background: transparent; margin-bottom: 28px; padding: 20px 12px; border: 1px solid var(--sc-border); border-radius: 16px; }
+.sc-inline-recorder .sc-composer-title { text-align: center; font-size: 17px; margin: 0; font-weight: 500; }
+.sc-inline-recorder .sc-intro { font-size: 12px; margin-top: 8px; }
+.sc-inline-recorder .sc-recorder-well { margin: 16px 0 0; padding: 14px 0; }
+.sc-inline-recorder .sc-orbit { width: 136px; height: 136px; box-shadow: 0 0 0 10px #dce5d550; }
+.sc-inline-recorder .sc-record-button { width: 106px; height: 106px; }
+.sc-inline-recorder .sc-timer { margin-top: 18px; font-size: 26px; }
+.sc-inline-recorder .sc-draft { padding: 14px; }
 @keyframes sc-breathe { 50% { box-shadow: 0 0 0 12px #a34d4015; } }
 @media (min-width: 850px) {
   .sc-main { display: grid; grid-template-columns: 1.15fr 1fr; align-items: start; gap: 72px; padding: 64px 30px; }

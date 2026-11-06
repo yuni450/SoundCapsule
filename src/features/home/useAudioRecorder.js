@@ -9,7 +9,7 @@ export function microphoneError(error) {
   return '녹음을 진행하지 못했어요. 마이크 연결을 확인하고 다시 시도해 주세요.';
 }
 
-export function useAudioRecorder() {
+export function useAudioRecorder({ canStart } = {}) {
   const [status, setStatus] = useState('idle');
   const [elapsed, setElapsed] = useState(0);
   const [draft, setDraft] = useState(null);
@@ -49,6 +49,10 @@ export function useAudioRecorder() {
   const start = async () => {
     if (session.current) return;
     setError('');
+    if (canStart && !canStart()) {
+      setError('오늘 날짜에서만 새로운 녹음을 시작할 수 있어요.');
+      return;
+    }
     if (!globalThis.isSecureContext) {
       setError('마이크 녹음은 HTTPS 또는 localhost 주소에서 사용할 수 있어요.');
       return;
@@ -74,6 +78,14 @@ export function useAudioRecorder() {
       active.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!isCurrent()) {
         active.stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      // 마이크 권한을 기다리는 사이 자정이 지났을 수 있으므로 다시 확인합니다.
+      if (canStart && !canStart()) {
+        active.stream.getTracks().forEach((track) => track.stop());
+        session.current = null;
+        setStatus('idle');
+        setError('날짜가 바뀌었어요. 오늘 날짜를 선택하고 녹음해 주세요.');
         return;
       }
       const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus']
