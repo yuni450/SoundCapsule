@@ -1,0 +1,6 @@
+.sc-app { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); background: #f8f6f1; }
+.sc-app-nav { position: fixed; z-index: 50; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; gap: 8px; background: #fffefbf5; border-top: 1px solid #dedfd4; padding: 10px 20px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.sc-app-nav button { flex: 1; max-width: 220px; min-height: 48px; border: 0; border-radius: 10px; color: #6f776e; background: transparent; font: inherit; font-size: 14px; cursor: pointer; }
+.sc-app-nav button[aria-current="page"] { color: #285442; background: #e5eddf; font-weight: 600; }
+.sc-app-nav button:focus-visible { outline: 3px solid #b16a34; outline-offset: 2px; }
+.sc-app-nav button:disabled { opacity: .5; cursor: wait; }
