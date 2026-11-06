@@ -7,12 +7,14 @@
  * @property {string} title
  * @property {string} audioUrl 저장된 파일 URL 또는 저장소 경로 (업로드는 별도 구현)
  * @property {string} recordedAt UTC ISO 8601 문자열
+ * @property {string} savedAt 실제 저장 완료 시각의 UTC ISO 8601 문자열
  * @property {number} duration 초 단위의 0 이상 유한수 (소수 허용)
- * @property {{name: string, latitude: number|null, longitude: number|null}} location
+ * @property {{name: string, latitude: number|null, longitude: number|null, country?: string, city?: string}} location
  * @property {string[]} photoUrls
  * @property {string} memo
  * @property {'private'|'friends'|'group'} visibility
  * @property {string|null} groupId group 공개 시 필수, 그 외 null
+ * @property {boolean} hasOriginal 원본 파일을 별도 보관하는지 여부
  * @property {string} createdAt UTC ISO 8601 문자열
  * @property {string} updatedAt UTC ISO 8601 문자열
  */
@@ -43,7 +45,7 @@ export function validateRecording(recording) {
       errors[field] = `${field}은(는) 비어 있지 않은 문자열이어야 합니다.`;
     }
   }
-  for (const field of ['recordedAt', 'createdAt', 'updatedAt']) {
+  for (const field of ['recordedAt', 'savedAt', 'createdAt', 'updatedAt']) {
     if (!isUtcTimestamp(recording[field])) {
       errors[field] = `${field}은(는) Date.toISOString() 형식의 UTC 시간이어야 합니다.`;
     }
@@ -57,6 +59,8 @@ export function validateRecording(recording) {
     errors.location = '장소명과 위도, 경도를 포함하는 객체여야 합니다.';
   } else {
     if (typeof location.name !== 'string') errors['location.name'] = '장소명은 문자열이어야 합니다.';
+    if (location.country !== undefined && typeof location.country !== 'string') errors['location.country'] = '국가명은 문자열이어야 합니다.';
+    if (location.city !== undefined && typeof location.city !== 'string') errors['location.city'] = '도시명은 문자열이어야 합니다.';
     for (const [field, limit] of [['latitude', 90], ['longitude', 180]]) {
       const coordinate = location[field];
       if (coordinate !== null && (!Number.isFinite(coordinate) || Math.abs(coordinate) > limit)) {
@@ -80,6 +84,7 @@ export function validateRecording(recording) {
   } else if (recording.groupId !== null) {
     errors.groupId = '그룹 공유가 아니면 그룹 ID는 null이어야 합니다.';
   }
+  if (recording.hasOriginal !== undefined && typeof recording.hasOriginal !== 'boolean') errors.hasOriginal = '원본 보관 여부는 boolean이어야 합니다.';
   if (isUtcTimestamp(recording.createdAt) && isUtcTimestamp(recording.updatedAt)
       && Date.parse(recording.updatedAt) < Date.parse(recording.createdAt)) {
     errors.updatedAt = '마지막 수정 시간은 생성 시간보다 빠를 수 없습니다.';
@@ -109,6 +114,7 @@ export function createRecording(input) {
     title: input.title,
     audioUrl: input.audioUrl,
     recordedAt: input.recordedAt,
+    savedAt: input.savedAt === undefined ? now : input.savedAt,
     duration: input.duration,
     location: input.location === undefined
       ? { name: '', latitude: null, longitude: null }
@@ -118,6 +124,7 @@ export function createRecording(input) {
     memo: input.memo === undefined ? '' : input.memo,
     visibility: input.visibility === undefined ? 'private' : input.visibility,
     groupId: input.groupId === undefined ? null : input.groupId,
+    hasOriginal: input.hasOriginal === true,
     createdAt: input.createdAt === undefined ? now : input.createdAt,
     updatedAt: input.updatedAt === undefined
       ? (input.createdAt === undefined ? now : input.createdAt) : input.updatedAt,

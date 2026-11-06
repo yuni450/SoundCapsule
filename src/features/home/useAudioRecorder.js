@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { readStored } from '../../lib/usePersistentState.js';
+import { playRecordingCue } from '../../lib/sounds.js';
+
+const defaults={quality:'high',format:'webm',noiseReduction:true,micGain:75,startEndSound:true,maxDuration:30,keepOriginal:true};
 import { isSavableRecordingDuration, MIN_RECORDING_MESSAGE } from '../../lib/recordingPolicy.js';
 
 // 종료 API 자체가 실패하더라도 트랙/이벤트/타이머는 반드시 정리합니다.
@@ -16,6 +20,8 @@ function disposeSession(active) {
     track.onended = null;
     track.stop();
   });
+  if(active.sourceStream&&active.sourceStream!==active.stream)active.sourceStream.getTracks().forEach(track=>track.stop());
+  active.audioContext?.close?.().catch?.(()=>{});
   active.chunks = [];
 }
 
@@ -53,6 +59,7 @@ export function useAudioRecorder({ canStart } = {}) {
     clearInterval(active.timer);
     setElapsed(active.duration);
     setStatus('stopping');
+    if(active.settings?.startEndSound)playRecordingCue('stop');
     try {
       active.recorder.stop();
     } catch (cause) {
@@ -76,7 +83,7 @@ export function useAudioRecorder({ canStart } = {}) {
       setError('이 브라우저는 녹음을 지원하지 않아요. 최신 Safari 또는 Chrome에서 열어 주세요.');
       return;
     }
-    const active = { chunks: [], stream: null, recorder: null, timer: null };
+    const active = { chunks: [], stream: null, sourceStream:null, recorder: null, timer: null,settings:{...defaults,...readStored('settings:sound:v2',{})} };
     session.current = active;
     setStatus('requesting');
     const isCurrent = () => mounted.current && session.current === active;
@@ -88,23 +95,28 @@ export function useAudioRecorder({ canStart } = {}) {
       setError(microphoneError(cause));
     };
     try {
-      active.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      active.sourceStream = await navigator.mediaDevices.getUserMedia({ audio:{noiseSuppression:Boolean(active.settings.noiseReduction),echoCancellation:Boolean(active.settings.noiseReduction),autoGainControl:true} });
+      active.stream=active.sourceStream;
       if (!isCurrent()) {
-        active.stream.getTracks().forEach((track) => track.stop());
+        active.sourceStream.getTracks().forEach((track) => track.stop());
         return;
       }
       // 마이크 권한을 기다리는 사이 자정이 지났을 수 있으므로 다시 확인합니다.
       if (canStart && !canStart()) {
-        active.stream.getTracks().forEach((track) => track.stop());
+        active.sourceStream.getTracks().forEach((track) => track.stop());
         session.current = null;
         setStatus('idle');
         setError('날짜가 바뀌었어요. 오늘 날짜를 선택하고 녹음해 주세요.');
         return;
       }
-      const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus']
+      const AudioContext=globalThis.AudioContext||globalThis.webkitAudioContext;
+      if(AudioContext&&Number(active.settings.micGain)!==100){try{active.audioContext=new AudioContext();const source=active.audioContext.createMediaStreamSource(active.sourceStream),gain=active.audioContext.createGain(),destination=active.audioContext.createMediaStreamDestination();gain.gain.value=Math.max(.1,Math.min(2,Number(active.settings.micGain||100)/100));source.connect(gain);gain.connect(destination);active.stream=destination.stream}catch{active.stream=active.sourceStream}}
+      const desired=active.settings.format==='mp4'?['audio/mp4','audio/webm;codecs=opus','audio/webm']:active.settings.format==='wav'?['audio/wav','audio/webm;codecs=opus','audio/webm']:['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'];
+      const mimeType = desired
         .find((type) => MediaRecorder.isTypeSupported?.(type));
+      const audioBitsPerSecond=active.settings.quality==='standard'?96000:active.settings.quality==='lossless'?320000:192000;
       active.recorder = mimeType
-        ? new MediaRecorder(active.stream, { mimeType }) : new MediaRecorder(active.stream);
+        ? new MediaRecorder(active.stream, { mimeType,audioBitsPerSecond }) : new MediaRecorder(active.stream,{audioBitsPerSecond});
       active.recorder.ondataavailable = ({ data }) => {
         if (data.size) active.chunks.push(data);
       };
@@ -112,6 +124,7 @@ export function useAudioRecorder({ canStart } = {}) {
       active.recorder.onstop = () => {
         clearInterval(active.timer);
         active.stream.getTracks().forEach((track) => track.stop());
+        if(active.sourceStream!==active.stream)active.sourceStream.getTracks().forEach(track=>track.stop());
         if (!isCurrent()) return;
         session.current = null;
         const duration = active.duration ?? (performance.now() - active.started) / 1000;
@@ -128,7 +141,7 @@ export function useAudioRecorder({ canStart } = {}) {
           setError('녹음된 소리가 없어요. 다시 녹음해 주세요.');
           return;
         }
-        setDraft({ blob, recordedAt: active.recordedAt, duration });
+        setDraft({ blob, originalBlob:active.settings.keepOriginal?blob:null, recordedAt: active.recordedAt, duration,recordingSettings:active.settings });
         setElapsed(duration);
         setStatus('ready');
       };
@@ -143,11 +156,12 @@ export function useAudioRecorder({ canStart } = {}) {
       active.started = performance.now();
       active.recordedAt = new Date().toISOString();
       active.recorder.start(1000);
+      if(active.settings.startEndSound)playRecordingCue('start');
       setDraft(null);
       setElapsed(0);
       setStatus('recording');
       active.timer = setInterval(() => {
-        if (isCurrent()) setElapsed((performance.now() - active.started) / 1000);
+        if (isCurrent()){const value=(performance.now()-active.started)/1000;setElapsed(value);if(value>=Number(active.settings.maxDuration||30)*60)stop()}
       }, 250);
     } catch (cause) {
       active.fail(cause);
