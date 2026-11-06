@@ -134,6 +134,31 @@ const initialFriends = [
   },
 ];
 
+const initialFriendRequests = [
+  {
+    id: 'request-haneul',
+    name: '이하늘',
+    handle: '@haneul.field',
+    avatar: 'HN',
+    streak: 5,
+    pianoCounts: [2, 1, 3, 0, 2, 1, 0],
+    recentSound: '한강 자전거길의 저녁 바람 소리',
+    mutualFriends: 3,
+    requestedAt: '10분 전',
+  },
+  {
+    id: 'request-yujin',
+    name: '최유진',
+    handle: '@yujin.archive',
+    avatar: 'YJ',
+    streak: 9,
+    pianoCounts: [3, 2, 2, 1, 4, 2, 1],
+    recentSound: '북촌 골목길의 빗소리',
+    mutualFriends: 1,
+    requestedAt: '1시간 전',
+  },
+];
+
 export default function App() {
   const [viewMode, setViewMode] = useState('mobile');
   const [activeTab, setActiveTab] = useState('home');
@@ -166,6 +191,8 @@ export default function App() {
   const [newLocation, setNewLocation] = useState('서울 성동구 뚝섬로 (GPS 자동감지)');
   const [includeLocationPin, setIncludeLocationPin] = useState(true);
   const [newMemo, setNewMemo] = useState('');
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [photoError, setPhotoError] = useState('');
 
   // 오디오 재생 상태
   const [playingId, setPlayingId] = useState(null);
@@ -178,7 +205,9 @@ export default function App() {
   // 친구 검색 및 설정 상태
   const [friendSearchId, setFriendSearchId] = useState('');
   const [friends, setFriends] = useState(initialFriends);
+  const [friendRequests, setFriendRequests] = useState(initialFriendRequests);
   const [friendSuccessToast, setFriendSuccessToast] = useState(false);
+  const [friendActionMessage, setFriendActionMessage] = useState('');
 
   // 설정 스위치 상태
   const [noiseFilter, setNoiseFilter] = useState(true);
@@ -219,6 +248,11 @@ export default function App() {
     }
   };
 
+  const startRecordingFromCalendar = () => {
+    setActiveTab('home');
+    if (!isRecording) handleStartStopRecord();
+  };
+
   // 녹음 저장 및 요일별 건반 진행도 자동 반영
   const handleSaveRecording = () => {
     const now = new Date();
@@ -239,7 +273,8 @@ export default function App() {
       location: newLocation,
       hasMapPin: includeLocationPin,
       memo: newMemo || '오늘의 분위기와 공기를 담은 소리. 일상의 평온한 기록.',
-      photo: 'https://images.unsplash.com/photo-1470240731273-7821a6eeb6bd?auto=format&fit=crop&w=600&q=80',
+      photo: selectedPhoto?.dataUrl || null,
+      photoName: selectedPhoto?.name || null,
       tags: ['일상', '소리일기'],
       revisitMonthsAgo: null,
       coordsPercent: { top: '48%', left: '46%' },
@@ -256,6 +291,8 @@ export default function App() {
 
     setShowSaveModal(false);
     setNewMemo('');
+    setSelectedPhoto(null);
+    setPhotoError('');
 
     // 건반 탭으로 이동하여 바로 소리 확인 가능
     setActiveTab('piano');
@@ -362,10 +399,63 @@ export default function App() {
     );
   };
 
+  const handlePhotoSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setSelectedPhoto(null);
+      setPhotoError('이미지 파일만 첨부할 수 있어요.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setSelectedPhoto(null);
+      setPhotoError('사진은 10MB 이하로 선택해 주세요.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedPhoto({
+        name: file.name,
+        dataUrl: String(reader.result),
+        sizeLabel: `${(file.size / 1024 / 1024).toFixed(1)}MB`,
+      });
+      setPhotoError('');
+    };
+    reader.onerror = () => {
+      setSelectedPhoto(null);
+      setPhotoError('사진을 불러오지 못했어요. 다시 선택해 주세요.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const closeSaveModal = () => {
+    setShowSaveModal(false);
+    setSelectedPhoto(null);
+    setPhotoError('');
+  };
+
   const handleCopyToken = (hex) => {
     navigator.clipboard?.writeText(hex);
     setCopiedTokenText(hex);
     setTimeout(() => setCopiedTokenText(null), 1800);
+  };
+
+  const handleFriendRequest = (requestId, action) => {
+    const request = friendRequests.find((item) => item.id === requestId);
+    if (!request) return;
+
+    if (action === 'accept') {
+      setFriends((current) => current.some((friend) => friend.id === request.id)
+        ? current
+        : [...current, request]);
+      setFriendActionMessage(`${request.name}님과 친구가 되었어요.`);
+    } else {
+      setFriendActionMessage(`${request.name}님의 친구 요청을 거절했어요.`);
+    }
+    setFriendRequests((current) => current.filter((item) => item.id !== requestId));
+    window.setTimeout(() => setFriendActionMessage(''), 2400);
   };
 
   const filteredRecordings = recordings.filter((r) => r.date === selectedDate);
@@ -714,13 +804,11 @@ export default function App() {
                     </span>
                     <button
                       type="button"
-                      className="brand-tag"
-                      onClick={() => {
-                        soundSynth.playChime('start');
-                        handleStartStopRecord();
-                      }}
+                      className="brand-tag calendar-add-record-btn"
+                      onClick={startRecordingFromCalendar}
+                      aria-label={`${selectedDate}에 새 소리 기록 시작`}
                     >
-                      + 새 기록 추가
+                      <span aria-hidden="true">＋</span> 새 기록 추가
                     </button>
                   </div>
 
@@ -1005,6 +1093,55 @@ export default function App() {
                     <p style={{ fontSize: 12, color: '#10b981', marginTop: 8, fontWeight: 600 }}>
                       ✓ 친구 추가 요청을 보냈습니다!
                     </p>
+                  )}
+                </div>
+
+                <div className="calendar-card friend-request-card">
+                  <div className="friend-request-heading">
+                    <div>
+                      <h3>받은 친구 요청</h3>
+                      <p>함께 소리를 나누고 싶어 하는 친구들이에요</p>
+                    </div>
+                    <span className="friend-request-count">{friendRequests.length}</span>
+                  </div>
+
+                  {friendActionMessage && (
+                    <p className="friend-action-message" role="status">✓ {friendActionMessage}</p>
+                  )}
+
+                  {friendRequests.length ? (
+                    <div className="friend-request-list">
+                      {friendRequests.map((request) => (
+                        <article className="friend-request-item" key={request.id}>
+                          <div className="avatar-tiny friend-request-avatar">{request.avatar}</div>
+                          <div className="friend-request-profile">
+                            <div>
+                              <strong>{request.name}</strong>
+                              <span>{request.handle}</span>
+                            </div>
+                            <p>함께 아는 친구 {request.mutualFriends}명 · {request.requestedAt}</p>
+                          </div>
+                          <div className="friend-request-actions">
+                            <button
+                              type="button"
+                              className="friend-request-reject"
+                              onClick={() => handleFriendRequest(request.id, 'reject')}
+                            >
+                              거절
+                            </button>
+                            <button
+                              type="button"
+                              className="friend-request-accept"
+                              onClick={() => handleFriendRequest(request.id, 'accept')}
+                            >
+                              수락
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="friend-request-empty">새로운 친구 요청이 없어요.</div>
                   )}
                 </div>
 
@@ -1350,7 +1487,7 @@ export default function App() {
           ------------------------------------------------------------------ */}
       {/* 1. 녹음 저장 모달 */}
       {showSaveModal && (
-        <div className="modal-overlay" onClick={() => setShowSaveModal(false)}>
+        <div className="modal-overlay" onClick={closeSaveModal}>
           <div className="sheet-container" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-grabber" />
             <div className="sheet-header">
@@ -1358,7 +1495,7 @@ export default function App() {
               <button
                 type="button"
                 className="cal-nav-btn"
-                onClick={() => setShowSaveModal(false)}
+                onClick={closeSaveModal}
               >
                 ✕
               </button>
@@ -1415,25 +1552,41 @@ export default function App() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">사진 첨부 (사진 앱 자동 연동)</label>
-              <div className="photo-preview-box">
-                <img
-                  src="https://images.unsplash.com/photo-1470240731273-7821a6eeb6bd?auto=format&fit=crop&w=600&q=80"
-                  alt="첨부 사진"
-                  className="photo-thumb"
+              <label className="form-label">사진 첨부</label>
+              <label className={`photo-preview-box photo-picker ${selectedPhoto ? 'has-photo' : ''}`}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="photo-file-input"
+                  onChange={handlePhotoSelect}
                 />
+                {selectedPhoto ? (
+                  <img
+                    src={selectedPhoto.dataUrl}
+                    alt="선택한 첨부 사진"
+                    className="photo-thumb"
+                  />
+                ) : (
+                  <span className="photo-add-icon" aria-hidden="true">＋</span>
+                )}
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 12, fontWeight: 600 }}>뚝섬 한강공원 노을.jpg</p>
-                  <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>GPS 메타데이터 일치 확인됨</p>
+                  <p style={{ fontSize: 12, fontWeight: 600 }}>
+                    {selectedPhoto ? selectedPhoto.name : '사진 보관함에서 선택'}
+                  </p>
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                    {selectedPhoto ? `${selectedPhoto.sizeLabel} · 눌러서 사진 변경` : 'JPG, PNG, HEIC 등 · 최대 10MB'}
+                  </p>
                 </div>
-              </div>
+                <span className="photo-picker-action">{selectedPhoto ? '변경' : '불러오기'}</span>
+              </label>
+              {photoError && <p className="photo-error" role="alert">{photoError}</p>}
             </div>
 
             <div className="sheet-buttons">
               <button
                 type="button"
                 className="btn-cancel"
-                onClick={() => setShowSaveModal(false)}
+                onClick={closeSaveModal}
               >
                 취소
               </button>

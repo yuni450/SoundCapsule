@@ -126,6 +126,29 @@ button, input, textarea, select {
   font-weight: 600;
 }
 
+.calendar-add-record-btn {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 13px;
+  background: #fff;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, transform 0.18s;
+}
+
+.calendar-add-record-btn:hover {
+  border-color: var(--action-primary);
+  background: var(--action-primary);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.calendar-add-record-btn:active {
+  transform: translateY(0);
+}
+
 .viewport-switchers {
   display: flex;
   background: var(--bg-subtle);
@@ -1536,6 +1559,62 @@ button, input, textarea, select {
   background: var(--bg-subtle);
 }
 
+.photo-picker {
+  width: 100%;
+  min-height: 78px;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.18s;
+}
+
+.photo-picker:hover,
+.photo-picker:focus-within {
+  border-color: var(--action-primary);
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.photo-picker.has-photo {
+  border-style: solid;
+}
+
+.photo-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.photo-add-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 10px;
+  background: #e4e4e7;
+  color: var(--text-secondary);
+  font-size: 25px;
+}
+
+.photo-picker-action {
+  padding: 5px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.photo-error {
+  margin-top: 6px;
+  color: #b91c1c;
+  font-size: 10px;
+}
+
 .photo-thumb {
   width: 52px;
   height: 52px;
@@ -1614,6 +1693,150 @@ button, input, textarea, select {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.friend-request-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.friend-request-heading h3 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.friend-request-heading p {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.friend-request-count {
+  min-width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--action-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.friend-request-list {
+  display: grid;
+  gap: 9px;
+}
+
+.friend-request-item {
+  min-height: 70px;
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-inner);
+  background: var(--bg-subtle);
+}
+
+.friend-request-avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  background: #52525b;
+}
+
+.friend-request-profile {
+  min-width: 0;
+  flex: 1;
+}
+
+.friend-request-profile > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.friend-request-profile strong {
+  font-size: 13px;
+}
+
+.friend-request-profile span,
+.friend-request-profile p {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.friend-request-profile p {
+  margin-top: 4px;
+}
+
+.friend-request-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.friend-request-actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.friend-request-reject {
+  border: 1px solid var(--border-default);
+  background: #fff;
+  color: var(--text-secondary);
+}
+
+.friend-request-accept {
+  border: 1px solid var(--action-primary);
+  background: var(--action-primary);
+  color: #fff;
+}
+
+.friend-action-message {
+  margin: -2px 0 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.friend-request-empty {
+  padding: 22px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-inner);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .friend-request-item {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .friend-request-profile {
+    width: calc(100% - 52px);
+  }
+
+  .friend-request-actions {
+    width: 100%;
+    padding-left: 51px;
+  }
+
+  .friend-request-actions button {
+    flex: 1;
+  }
 }
 
 .friend-piano-view-btn {
