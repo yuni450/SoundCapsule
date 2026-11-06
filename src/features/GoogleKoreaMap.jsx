@@ -90,6 +90,8 @@ export default function GoogleKoreaMap({ places, selectedPlace, onSelect, curren
       content: dot,
       zIndex: 10,
     });
+    mapRef.current.panTo({ lat: currentPosition.latitude, lng: currentPosition.longitude });
+    if (mapRef.current.getZoom() < 15) mapRef.current.setZoom(15);
   }, [currentPosition, status]);
 
   useEffect(() => {

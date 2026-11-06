@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { soundSynth } from './soundSynth';
+import GoogleKoreaMap from './features/GoogleKoreaMap.jsx';
+import { reverseGeocode } from './features/googleMapsLoader.js';
 
 // 요일별 7개 피아노 건반 메타데이터 (월~일 / 도~시)
 const PIANO_KEYS = [
@@ -43,6 +45,7 @@ const initialRecordings = [
     tags: ['파도', '노을', '힐링'],
     revisitMonthsAgo: 3,
     coordsPercent: { top: '65%', left: '38%' },
+    coordinates: { latitude: 33.3947, longitude: 126.2397 },
   },
   {
     id: 'rec-2',
@@ -60,6 +63,7 @@ const initialRecordings = [
     tags: ['카페', '빗소리', '집중'],
     revisitMonthsAgo: null,
     coordsPercent: { top: '32%', left: '55%' },
+    coordinates: { latitude: 37.5446, longitude: 127.0559 },
   },
   {
     id: 'rec-3',
@@ -77,6 +81,7 @@ const initialRecordings = [
     tags: ['산책', '바람', '친구들'],
     revisitMonthsAgo: 1,
     coordsPercent: { top: '40%', left: '52%' },
+    coordinates: { latitude: 37.5512, longitude: 126.9882 },
   },
   {
     id: 'rec-4',
@@ -94,6 +99,7 @@ const initialRecordings = [
     tags: ['가을밤', '풀벌레', '휴식'],
     revisitMonthsAgo: null,
     coordsPercent: { top: '28%', left: '60%' },
+    coordinates: { latitude: 37.8738, longitude: 127.7134 },
   },
 ];
 
@@ -163,8 +169,11 @@ export default function App() {
 
   // 오디오 재생 상태
   const [playingId, setPlayingId] = useState(null);
-  const [mapMode, setMapMode] = useState('map');
   const [selectedPin, setSelectedPin] = useState(recordings[0]);
+  const [currentPosition, setCurrentPosition] = useState(null);
+  const [gpsStatus, setGpsStatus] = useState('idle');
+  const [gpsMessage, setGpsMessage] = useState('');
+  const [currentLocationLabel, setCurrentLocationLabel] = useState('현재 위치 확인');
 
   // 친구 검색 및 설정 상태
   const [friendSearchId, setFriendSearchId] = useState('');
@@ -311,6 +320,48 @@ export default function App() {
     }
   };
 
+  const locateCurrentPosition = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus('error');
+      setGpsMessage('이 브라우저에서는 현재 위치를 사용할 수 없어요.');
+      return;
+    }
+
+    setGpsStatus('loading');
+    setGpsMessage('현재 위치를 확인하고 있어요.');
+    setCurrentLocationLabel('위치 확인 중…');
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        setCurrentPosition({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+        });
+        setGpsStatus('ready');
+        setGpsMessage(`현재 위치를 찾았어요 · 정확도 약 ${Math.round(coords.accuracy)}m`);
+        try {
+          const place = await reverseGeocode(coords.latitude, coords.longitude);
+          const label = place.address.replace(/^대한민국\s*/, '') || place.city;
+          setCurrentLocationLabel(label);
+          setNewLocation(label);
+        } catch {
+          setCurrentLocationLabel(`${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
+        }
+      },
+      (error) => {
+        const message = error.code === error.PERMISSION_DENIED
+          ? '위치 권한이 필요해요. 브라우저 설정에서 위치 접근을 허용해 주세요.'
+          : error.code === error.TIMEOUT
+            ? '위치 확인 시간이 초과됐어요. 다시 시도해 주세요.'
+            : '현재 위치를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.';
+        setGpsStatus('error');
+        setGpsMessage(message);
+        setCurrentLocationLabel('현재 위치 다시 확인');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  };
+
   const handleCopyToken = (hex) => {
     navigator.clipboard?.writeText(hex);
     setCopiedTokenText(hex);
@@ -319,6 +370,16 @@ export default function App() {
 
   const filteredRecordings = recordings.filter((r) => r.date === selectedDate);
   const mapRecordings = recordings.filter((r) => r.hasMapPin);
+  const mapPlaces = mapRecordings
+    .filter((recording) => recording.coordinates)
+    .map((recording) => ({
+      key: recording.id,
+      name: recording.location,
+      city: recording.location.split(' ')[1] || recording.location,
+      latitude: recording.coordinates.latitude,
+      longitude: recording.coordinates.longitude,
+      recordings: [recording],
+    }));
 
   return (
     <>
@@ -467,9 +528,19 @@ export default function App() {
             {activeTab === 'home' && (
               <div className="record-screen">
                 <div className="sound-hero-meta">
-                  <div className="sound-badge">
-                    <span>GPS</span> 서울 성동구 뚝섬로 · 맑음 18°C
-                  </div>
+                  <button
+                    type="button"
+                    className={`sound-badge gps-home-badge ${gpsStatus === 'ready' ? 'active' : ''}`}
+                    onClick={locateCurrentPosition}
+                    disabled={gpsStatus === 'loading'}
+                    aria-label="현재 위치 확인"
+                  >
+                    <span>GPS</span> {currentLocationLabel}
+                    {gpsStatus === 'ready' && ' · 맑음 18°C'}
+                  </button>
+                  {gpsStatus === 'error' && (
+                    <p className="home-gps-message" role="alert">{gpsMessage}</p>
+                  )}
                   <h2>그날의 공기와 소리를 담아보세요</h2>
                   <p>
                     친구들의 웃음소리, 파도와 바람 소리를 기록하면<br />
@@ -708,7 +779,7 @@ export default function App() {
             )}
 
             {/* ==========================================================
-                TAB 3: 지도 · 장소별 기록 & 지구본 탐색 & 재방문 알림
+                TAB 3: 지도 · 장소별 기록 & 재방문 알림
                 ========================================================== */}
             {activeTab === 'map' && (
               <div className="map-screen">
@@ -728,93 +799,32 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* 지도 상단 모드 스위치 (지역 지도 vs 3D 지구본) */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '76px',
-                    right: '16px',
-                    zIndex: 20,
-                    background: '#ffffff',
-                    padding: '3px',
-                    borderRadius: 'var(--radius-pill)',
-                    border: '1px solid var(--border-default)',
-                    display: 'flex',
-                    gap: '4px',
-                  }}
-                >
+                <div className="gps-control">
                   <button
                     type="button"
-                    className={`switch-btn ${mapMode === 'map' ? 'active' : ''}`}
-                    onClick={() => setMapMode('map')}
-                    style={{ fontSize: 11, padding: '4px 10px' }}
+                    className={`gps-location-button ${gpsStatus === 'ready' ? 'active' : ''}`}
+                    onClick={locateCurrentPosition}
+                    disabled={gpsStatus === 'loading'}
                   >
-                    🗺️ 2D 지도
+                    <span aria-hidden="true">◎</span>
+                    {gpsStatus === 'loading' ? '위치 확인 중' : '현재 위치'}
                   </button>
-                  <button
-                    type="button"
-                    className={`switch-btn ${mapMode === 'globe' ? 'active' : ''}`}
-                    onClick={() => setMapMode('globe')}
-                    style={{ fontSize: 11, padding: '4px 10px' }}
-                  >
-                    🌐 3D 지구본
-                  </button>
+                  {gpsMessage && (
+                    <div className={`gps-status-message ${gpsStatus}`} role="status">
+                      {gpsMessage}
+                    </div>
+                  )}
                 </div>
 
-                {/* 지도 캔버스 */}
+                {/* Google 2D 지도 */}
                 <div className="map-viewport">
-                  {mapMode === 'globe' ? (
-                    <div
-                      style={{
-                        height: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 200,
-                          height: 200,
-                          borderRadius: '50%',
-                          border: '2px solid var(--border-strong)',
-                          background: 'radial-gradient(circle at 30% 30%, #e0f2fe, #38bdf8 70%, #0369a1)',
-                          boxShadow: 'inset -20px -20px 40px rgba(0,0,0,0.3), 0 12px 30px rgba(0,0,0,0.15)',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>전 세계 4개 기록</span>
-                      </div>
-                      <p style={{ marginTop: 14, fontSize: 12, fontWeight: 600 }}>
-                        지구본을 회전해 전 세계에서 담은 소리를 탐색하세요
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      {mapRecordings.map((rec) => (
-                        <div
-                          key={rec.id}
-                          className={`map-pin ${selectedPin.id === rec.id ? 'active' : ''}`}
-                          style={{
-                            top: rec.coordsPercent.top,
-                            left: rec.coordsPercent.left,
-                          }}
-                          onClick={() => setSelectedPin(rec)}
-                        >
-                          <div className={`pin-bubble ${rec.id === 'rec-1' ? 'pulse' : ''}`}>
-                            <span>🎙️</span>
-                            <span>{rec.title.split(' ')[0]}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
+                  <GoogleKoreaMap
+                    places={mapPlaces}
+                    selectedPlace={selectedPin?.id || null}
+                    onSelect={(place) => setSelectedPin(place.recordings[0])}
+                    currentPosition={currentPosition}
+                    searchRequest=""
+                  />
                 </div>
 
                 {/* 선택된 핀 하단 바텀 시트 */}
@@ -1155,6 +1165,8 @@ export default function App() {
               </div>
             )}
 
+          </div>
+
             {/* ----------------------------------------------------------
                 모바일 하단 6개 네비게이션 탭 바 (Ollama Tactile Pill Bar)
                 ---------------------------------------------------------- */}
@@ -1210,7 +1222,6 @@ export default function App() {
                 </button>
               </nav>
             )}
-          </div>
         </div>
 
         {/* ------------------------------------------------------------------
@@ -1624,118 +1635,4 @@ export default function App() {
       )}
     </>
   );
-import { useEffect, useRef, useState } from 'react';
-import AuthScreen from './AuthScreen.jsx';
-import { usePersistentState } from './lib/usePersistentState.js';
-import Home from './features/home/Home.jsx';
-import Calendar from './features/calendar/Calendar.jsx';
-import MapHub from './features/MapHub.jsx';
-import FriendsHub from './features/FriendsHub.jsx';
-import GroupsHub from './features/GroupsHub.jsx';
-import SettingsHub from './features/SettingsHub.jsx';
-import PianoHub from './features/PianoHub.jsx';
-import { playNotificationSound } from './lib/sounds.js';
-
-const baseFriends = [
-  { id:'haru.wave',name:'하루',handle:'@haru.wave',color:'#dc9a79',status:'방금 새로운 소리를 남겼어요' },
-  { id:'min.zip',name:'민지',handle:'@min.zip',color:'#77a593',status:'서울 · 2시간 전' },
-  { id:'june.sound',name:'준',handle:'@june.sound',color:'#7995af',status:'부산 · 어제' },
-  { id:'sora.day',name:'소라',handle:'@sora.day',color:'#9283aa',status:'제주 · 3일 전' },
-];
-
-const baseGroups = [
-  { id:1,name:'여름 바다 여행',emoji:'🌊',members:['하루','민지','준','나'],preview:'민지: 파도 소리 올렸어!',time:'오후 2:18' },
-  { id:2,name:'우리들의 주말',emoji:'☀️',members:['소라','하루','나'],preview:'소라: 다음 주에도 만나요',time:'어제' },
-];
-
-const localSession = { id:'local.user',name:'나',role:'member',local:true };
-const bypassAuth = import.meta.env.VITE_E2E_BYPASS_AUTH === '1';
-const initialSession = bypassAuth ? localSession : null;
-const nav = [
-  { id:'home',label:'홈 · 녹음',shortLabel:'홈',icon:'home' },
-  { id:'calendar',label:'캘린더',shortLabel:'캘린더',icon:'calendar' },
-  { id:'map',label:'지도',shortLabel:'지도',icon:'map' },
-  { id:'piano',label:'🎵 음표',shortLabel:'음표',icon:'music' },
-  { id:'friends',label:'친구',shortLabel:'친구',icon:'people' },
-  { id:'settings',label:'설정',shortLabel:'설정',icon:'settings' },
-];
-
-function Icon({ name, size = 20 }) {
-  const paths = {
-    home:<><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10M9.5 20v-6h5v6"/></>,
-    calendar:<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></>,
-    map:<><path d="M3 6.5 8.5 3l7 3.5L21 3v14.5L15.5 21l-7-3.5L3 21z"/><path d="M8.5 3v14.5M15.5 6.5V21"/></>,
-    people:<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></>,
-    chat:<><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></>,
-    music:<><path d="M10 18V5l10-2v13M10 8l10-2"/><ellipse cx="7" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></>,
-    settings:<><circle cx="12" cy="12" r="3"/><path d="M19 15l2 2-4 4-2-2a8 8 0 0 1-3 1v3H7v-3a8 8 0 0 1-2-1l-2 2-4-4 2-2a8 8 0 0 1-1-3h-3V7h3a8 8 0 0 1 1-2l-2-2 4-4 2 2a8 8 0 0 1 2-1v-3h5v3a8 8 0 0 1 3 1l2-2 4 4-2 2a8 8 0 0 1 1 2h3v5h-3a8 8 0 0 1-1 3z"/></>,
-    bell:<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
-    check:<path d="m5 12 4 4L19 6"/>,
-  };
-  return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
-}
-
-function Toast({ text }) {
-  return text ? <div className="toast" role="status"><Icon name="check" size={17}/>{text}</div> : null;
-}
-
-function Avatar({ name,image }) {
-  return image?<img className="avatar sm" src={image} alt=""/>:<span className="avatar sm coral">{name?.[0] || '나'}</span>;
-}
-
-export default function App() {
-  const [page,setPage]=useState(()=>new URLSearchParams(location.search).has('openRecording')?'map':'home');
-  const [homeActivity,setHomeActivity]=useState({hasUnsaved:false,busy:false});
-  const [calendarActivity,setCalendarActivity]=useState({hasUnsaved:false,busy:false});
-  const [friends,setFriends]=usePersistentState('friends',baseFriends);
-  const [blocked,setBlocked]=usePersistentState('blocked',[]);
-  const [groups,setGroups]=usePersistentState('groups',baseGroups);
-  const [users,setUsers]=usePersistentState('users',[]);
-  const [session,setSession]=usePersistentState('session',initialSession);
-  const [sessions,setSessions]=usePersistentState('account:sessions',[]);
-  const [toast,setToast]=useState('');
-  const timer=useRef(null);
-  const activity=page==='home'?homeActivity:page==='calendar'?calendarActivity:{hasUnsaved:false,busy:false};
-  useEffect(()=>{const check=event=>{if(!session?.sessionId)return;let revoked=[];try{revoked=JSON.parse(event?.newValue||localStorage.getItem('soundcapsule:revoked-sessions')||'[]')}catch{}if(revoked.includes(session.sessionId))setSession(null)};window.addEventListener('storage',check);check();return()=>window.removeEventListener('storage',check)},[session?.sessionId,setSession]);
-
-  const navigate=(next)=>{
-    if(next===page||activity.busy)return;
-    if(activity.hasUnsaved&&!window.confirm('저장하지 않은 녹음이나 메모가 있어요. 화면을 이동하면 사라집니다. 이동할까요?'))return;
-    setHomeActivity({hasUnsaved:false,busy:false});
-    setCalendarActivity({hasUnsaved:false,busy:false});
-    setPage(next);
-  };
-
-  const notify=(text,type='message')=>{
-    const saved=localStorage.getItem('soundcapsule:settings:alerts:v2');
-    let settings=null;
-    try{settings=saved?JSON.parse(saved):null}catch{}
-    const enabled=settings?.[type]!==false;
-    const inApp=settings?.channels?.inApp!==false;
-    if(inApp&&enabled){setToast(text);if(!document.hidden)playNotificationSound(settings?.sound||'soft');clearTimeout(timer.current);timer.current=setTimeout(()=>setToast(''),2500)}
-    if(!enabled||settings?.channels?.push===false||!('Notification'in window)||Notification.permission!=='granted'||!document.hidden)return;
-    const quiet=settings?.quiet;
-    if(quiet?.enabled){const time=new Date().toTimeString().slice(0,5);const muted=quiet.start<quiet.end?time>=quiet.start&&time<quiet.end:time>=quiet.start||time<quiet.end;if(muted)return}
-    navigator.serviceWorker?.ready.then(registration=>registration.showNotification('SoundCapsule',{body:text,icon:'/favicon.svg',tag:`soundcapsule-${type}`})).catch(()=>new Notification('SoundCapsule',{body:text}));
-    if(settings?.vibration)navigator.vibrate?.(80);
-  };
-
-  if(!session||(session.local&&!bypassAuth))return <AuthScreen users={users} setUsers={setUsers} onLogin={user=>{const loginAt=new Date().toISOString(),sessionId=crypto.randomUUID();setSession({id:user.id,name:user.name,role:user.role,profileImage:user.profileImage||null,loginAt,sessionId});setSessions(current=>[...current.filter(item=>item.userId!==user.id||item.sessionId!==sessionId),{sessionId,userId:user.id,loginAt,userAgent:navigator.userAgent,current:true}]);setPage(new URLSearchParams(location.search).has('openRecording')?'map':'home')}}/>;
-
-  const content={
-    home:<Home key={session.id} onActivityChange={setHomeActivity} groups={groups}/>,
-    calendar:<Calendar key={session.id} onActivityChange={setCalendarActivity} appGroups={groups}/>,
-    map:<MapHub notify={notify}/>,
-    piano:<PianoHub key={session.id} userId={session.local?undefined:session.id}/>,
-    friends:<FriendsHub friends={friends} setFriends={setFriends} blocked={blocked} setBlocked={setBlocked} notify={notify} currentUser={session}/>,
-    groups:<GroupsHub groups={groups} setGroups={setGroups} friends={friends} notify={notify} currentUser={session}/>,
-    settings:<SettingsHub notify={notify} currentUser={session} users={users} setUsers={setUsers} groups={groups} sessions={sessions.filter(item=>item.userId===session.id)} setSessions={setSessions} onProfileUpdate={profile=>{const oldId=session.id;setSession(current=>({...current,...profile}));setSessions(current=>current.map(item=>item.userId===oldId?{...item,userId:profile.id}:item))}} onRevokeSession={sessionId=>{setSessions(current=>current.filter(item=>item.sessionId!==sessionId));let revoked=[];try{revoked=JSON.parse(localStorage.getItem('soundcapsule:revoked-sessions')||'[]')}catch{}localStorage.setItem('soundcapsule:revoked-sessions',JSON.stringify([...new Set([...revoked,sessionId])]));if(sessionId===session.sessionId)setSession(null)}} onLogout={()=>{setSessions(current=>current.filter(item=>item.sessionId!==session.sessionId));setSession(null)}}/>,
-  };
-
-  return <div className="shell merged-shell">
-    <aside className="sidebar"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><nav>{nav.map(item=><button type="button" className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav><button type="button" className="group-entry" aria-label="그룹 열기" aria-current={page==='groups'?'page':undefined} disabled={activity.busy} onClick={()=>navigate('groups')}><Icon name="chat"/>그룹 열기</button><div className="memory"><span>오늘의 지난 소리</span><strong>작년 오늘, 성수동</strong><p>카페 창가의 빗소리</p></div><div className="me"><Avatar name={session.name} image={session.profileImage}/><span><strong>{session.name}</strong><small>@{session.id}</small></span></div></aside>
-    <main className="main"><header className="mobile"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><button type="button" className="group-entry" aria-label="그룹 열기" disabled={activity.busy} onClick={()=>navigate('groups')}>그룹</button><Icon name="bell"/></header>{content[page]}</main>
-    <nav className="bottom" aria-label="주요 화면">{nav.map(item=><button type="button" aria-label={item.label} className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/><span aria-hidden="true">{item.shortLabel}</span></button>)}</nav>
-    <Toast text={toast}/>
-  </div>;
 }
