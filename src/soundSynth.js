@@ -1,4 +1,4 @@
-// Web Audio API를 활용한 미니멀 사운드 합성기 (외부 오디오 파일 없이도 브라우저에서 즉시 작동)
+// Web Audio API를 활용한 사운드 & 리얼 피아노 7음계 합성기
 class SoundSynthesizer {
   constructor() {
     this.ctx = null;
@@ -23,13 +23,13 @@ class SoundSynthesizer {
         if (node.stop) node.stop();
         if (node.disconnect) node.disconnect();
       } catch (e) {
-        // 이미 중지된 노드 무시
+        // 무시
       }
     });
     this.activeNodes = [];
   }
 
-  // 1. 파도 소리 (Ocean Wave - Brown Noise + LFO 필터)
+  // 1. 파도 소리 (Ocean Wave)
   playWave() {
     this.init();
     if (!this.ctx) return;
@@ -43,7 +43,7 @@ class SoundSynthesizer {
       const white = Math.random() * 2 - 1;
       data[i] = (lastOut + 0.02 * white) / 1.02;
       lastOut = data[i];
-      data[i] *= 3.5; // 게인 보정
+      data[i] *= 3.5;
     }
 
     const noise = this.ctx.createBufferSource();
@@ -54,9 +54,8 @@ class SoundSynthesizer {
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(250, this.ctx.currentTime);
 
-    // 파도의 밀물 썰물 시뮬레이션 LFO
     const lfo = this.ctx.createOscillator();
-    lfo.frequency.setValueAtTime(0.18, this.ctx.currentTime); // 5초 주기
+    lfo.frequency.setValueAtTime(0.18, this.ctx.currentTime);
     const lfoGain = this.ctx.createGain();
     lfoGain.gain.setValueAtTime(180, this.ctx.currentTime);
 
@@ -72,11 +71,10 @@ class SoundSynthesizer {
 
     noise.start();
     lfo.start();
-
     this.activeNodes.push(noise, lfo, masterGain);
   }
 
-  // 2. 빗소리 (Rain Ambience - Pink Noise + Highpass)
+  // 2. 빗소리 (Rain Ambience)
   playRain() {
     this.init();
     if (!this.ctx) return;
@@ -115,7 +113,7 @@ class SoundSynthesizer {
     this.activeNodes.push(noise, gain);
   }
 
-  // 3. 바람 소리와 낙엽 (Wind / Leaves)
+  // 3. 바람 소리 (Wind Ambience)
   playWind() {
     this.init();
     if (!this.ctx) return;
@@ -156,7 +154,7 @@ class SoundSynthesizer {
     this.activeNodes.push(noise, lfo, gain);
   }
 
-  // 비프음 (녹음 시작/종료 효과음)
+  // 4. 차임벨 (녹음 시작/종료음)
   playChime(type = 'start') {
     this.init();
     if (!this.ctx) return;
@@ -165,20 +163,72 @@ class SoundSynthesizer {
     osc.type = 'sine';
 
     if (type === 'start') {
-      osc.frequency.setValueAtTime(587.33, this.ctx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.12); // A5
+      osc.frequency.setValueAtTime(523.25, this.ctx.currentTime);
+      osc.frequency.setValueAtTime(659.25, this.ctx.currentTime + 0.08);
+      osc.frequency.setValueAtTime(783.99, this.ctx.currentTime + 0.16);
     } else {
-      osc.frequency.setValueAtTime(880, this.ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(587.33, this.ctx.currentTime + 0.12);
+      osc.frequency.setValueAtTime(783.99, this.ctx.currentTime);
+      osc.frequency.setValueAtTime(523.25, this.ctx.currentTime + 0.1);
     }
 
     gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
 
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start();
-    osc.stop(this.ctx.currentTime + 0.25);
+    osc.stop(this.ctx.currentTime + 0.35);
+  }
+
+  // 5. 🎵 리얼 피아노 12반음계 합성음 (흰건반 7개 + 검은건반 5개)
+  // 흰건반: 도(C4 261.63Hz), 레(D4 293.66Hz), 미(E4 329.63Hz), 파(F4 349.23Hz), 솔(G4 392.00Hz), 라(A4 440.00Hz), 시(B4 493.88Hz)
+  // 검은건반: 도#(C#4 277.18Hz), 레#(D#4 311.13Hz), 파#(F#4 369.99Hz), 솔#(G#4 415.30Hz), 라#(A#4 466.16Hz)
+  playPianoNote(keyIndex = 0, isBlack = false) {
+    this.init();
+    if (!this.ctx) return;
+
+    const whiteFreqs = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88];
+    const blackFreqs = [277.18, 311.13, 369.99, 415.30, 466.16];
+
+    const freq = isBlack
+      ? (blackFreqs[keyIndex] || 277.18)
+      : (whiteFreqs[keyIndex] || 261.63);
+
+    const now = this.ctx.currentTime;
+
+    // 기음 (Fundamental - Sine)
+    const osc1 = this.ctx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(freq, now);
+
+    // 2차 배음 (Harmonic Overtones for rich acoustic piano resonance)
+    const osc2 = this.ctx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(freq * 2, now);
+
+    const gain1 = this.ctx.createGain();
+    const gain2 = this.ctx.createGain();
+    const masterGain = this.ctx.createGain();
+
+    // 피아노 어택 & 감쇄 엔벨로프
+    gain1.gain.setValueAtTime(isBlack ? 0.22 : 0.26, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+    gain2.gain.setValueAtTime(0.08, now);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+    masterGain.gain.setValueAtTime(0.75, now);
+
+    osc1.connect(gain1);
+    osc2.connect(gain2);
+    gain1.connect(masterGain);
+    gain2.connect(masterGain);
+    masterGain.connect(this.ctx.destination);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 1.2);
+    osc2.stop(now + 1.2);
   }
 }
 
