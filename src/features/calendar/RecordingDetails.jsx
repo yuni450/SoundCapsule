@@ -36,11 +36,17 @@ export default function RecordingDetails({ recording, onActivityChange }) {
   const lock = useRef(false);
   const mounted = useRef(true);
   const fileInput = useRef(null);
+  const memoSource = useRef(recording.memo);
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
-  useEffect(() => { if (!dirty) setMemo(recording.memo); }, [recording.memo, dirty]);
+  useEffect(() => {
+    const changed = memoSource.current !== recording.memo;
+    memoSource.current = recording.memo;
+    // 저장 직후 dirty만 바뀐 경우에는 재조회 전의 오래된 props로 덮어쓰지 않습니다.
+    if (changed && !dirty) setMemo(recording.memo);
+  }, [recording.memo, dirty]);
   useEffect(() => {
     onActivityChange(recording.id, { dirty, busy });
   }, [recording.id, dirty, busy, onActivityChange]);
@@ -56,9 +62,9 @@ export default function RecordingDetails({ recording, onActivityChange }) {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError(''); setNotice('');
     try {
-      await action();
+      const updated = await action();
       if (mounted.current) {
-        if (memoSaved) setDirty(false);
+        if (memoSaved) { setMemo(updated.memo); setDirty(false); }
         setNotice(message);
       }
     } catch (cause) {

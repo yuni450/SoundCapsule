@@ -23,8 +23,13 @@ export function subscribeRecordings(callback) {
   window.addEventListener('focus', callback);
   const visible = () => { if (document.visibilityState === 'visible') callback(); };
   document.addEventListener('visibilitychange', visible);
-  const channel = globalThis.BroadcastChannel ? new BroadcastChannel(CHANGE_EVENT) : null;
-  if (channel) channel.onmessage = callback;
+  let channel = null;
+  try {
+    if (globalThis.BroadcastChannel) {
+      channel = new BroadcastChannel(CHANGE_EVENT);
+      channel.onmessage = callback;
+    }
+  } catch { /* 차단된 환경에서는 같은 탭 알림과 화면 복귀 재조회를 사용합니다. */ }
   return () => {
     window.removeEventListener(CHANGE_EVENT, callback);
     window.removeEventListener('focus', callback);

@@ -1,5 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 
+// 종료 API 자체가 실패하더라도 트랙/이벤트/타이머는 반드시 정리합니다.
+function disposeSession(active) {
+  clearInterval(active.timer);
+  if (active.recorder) {
+    active.recorder.ondataavailable = null;
+    active.recorder.onerror = null;
+    active.recorder.onstop = null;
+    try {
+      if (active.recorder.state !== 'inactive') active.recorder.stop();
+    } catch { /* 마이크 트랙 정리를 계속 진행합니다. */ }
+  }
+  active.stream?.getTracks().forEach((track) => {
+    track.onended = null;
+    track.stop();
+  });
+  active.chunks = [];
+}
+
 export function microphoneError(error) {
   if (['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(error?.name)) {
     return '마이크 사용을 허용해 주세요. 브라우저의 사이트 권한 설정에서 변경할 수 있어요.';
@@ -23,11 +41,7 @@ export function useAudioRecorder({ canStart } = {}) {
       mounted.current = false;
       const active = session.current;
       session.current = null;
-      if (active) {
-        clearInterval(active.timer);
-        if (active.recorder?.state !== 'inactive' && active.recorder) active.recorder.stop();
-        active.stream?.getTracks().forEach((track) => track.stop());
-      }
+      if (active) disposeSession(active);
     };
   }, []);
 
@@ -68,9 +82,7 @@ export function useAudioRecorder({ canStart } = {}) {
     active.fail = (cause) => {
       if (!isCurrent()) return;
       session.current = null;
-      clearInterval(active.timer);
-      if (active.recorder && active.recorder.state !== 'inactive') active.recorder.stop();
-      active.stream?.getTracks().forEach((track) => track.stop());
+      disposeSession(active);
       setStatus('idle');
       setError(microphoneError(cause));
     };
