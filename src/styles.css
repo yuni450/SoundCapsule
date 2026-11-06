@@ -37,5 +37,6 @@ body {
 @media(max-width:760px){.google-map-stage,.google-map-state{min-height:520px}.google-map-summary{left:12px;top:12px}.google-map-legend{left:12px;bottom:12px}.google-record-marker b{display:none}}
 
 /* Unified navigation after the feature branches were merged */
+.sidebar>.group-entry{margin-top:12px;display:flex;align-items:center;gap:10px;min-height:44px;border:1px solid #ffffff35;border-radius:10px;padding:8px 14px;background:transparent;color:#d2ded7;text-align:left;font-size:12px}.sidebar>.group-entry[aria-current="page"]{background:#ffffff18;color:white}.mobile>.group-entry{margin-left:auto;margin-right:14px;min-height:36px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--green);font-size:11px}.group-entry:focus-visible{outline:3px solid #ecb08b;outline-offset:3px}
 .merged-shell .sidebar nav{margin-top:32px;gap:4px}.merged-shell .sidebar nav button{padding-block:10px}.merged-shell .sidebar .memory{margin-top:auto}
 @media(max-width:760px){.merged-shell .bottom{grid-template-columns:repeat(6,minmax(0,1fr))}.merged-shell .bottom button{min-width:0;padding:0 2px}.merged-shell .bottom button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px}}

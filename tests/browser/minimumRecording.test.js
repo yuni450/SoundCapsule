@@ -16,6 +16,7 @@ for (const screen of ['홈', '캘린더']) {
           const stream = await original(options); window.testStream = stream; return stream;
         };
       });
+      await page.clock.setFixedTime(new Date('2026-11-06T03:00:00.000Z'));
       await page.goto(BASE_URL);
       if (screen === '캘린더') await page.getByRole('button', { name: '캘린더', exact: true }).click();
       const records = () => page.evaluate(async () => (await import('/src/storage/recordings.js')).listRecordings());
@@ -29,6 +30,8 @@ for (const screen of ['홈', '캘린더']) {
       assert.equal(await page.getByRole('button', { name: '소리 저장하기', exact: true }).count(), 0);
       assert.equal(await page.locator('form.sc-draft, audio').count(), 0);
       assert.equal((await records()).length, 0);
+      const emptyPiano = await page.evaluate(async () => (await import('/src/domain/piano/index.js')).getMonthlyPiano('2026-11'));
+      assert.equal(emptyPiano.weekdays.reduce((sum, day) => sum + day.uniqueDateCount, 0), 0);
       assert.equal(await page.evaluate(() => window.testStream.getTracks().every(track => track.readyState === 'ended')), true);
 
       // 표시 타이머 업데이트를 멈춰도 실제 3초 이상이면 정상 초안이어야 합니다.
@@ -46,6 +49,8 @@ for (const screen of ['홈', '캘린더']) {
       await page.getByRole('heading', { name: `${screen} 3초 녹음`, exact: true }).waitFor();
       const saved = await records();
       assert.equal(saved.length, 1); assert(saved[0].duration >= 3);
+      const piano = await page.evaluate(async userId => (await import('/src/domain/piano/index.js')).getMonthlyPiano('2026-11', { userId }), saved[0].userId);
+      assert.equal(piano.weekdays[4].uniqueDateCount, 1);
       assert.equal(await page.getByText(message, { exact: true }).count(), 0);
       assert.deepEqual(errors, []);
     } finally { await browser.close(); }
@@ -74,12 +79,3 @@ test('저장 API 직접 호출도 3초 미만이면 DB에 정보를 남기지 �
     assert.equal(result.before.length, 0); assert.equal(result.after.length, 1); assert.equal(result.after[0].duration, 3);
   } finally { await browser.close(); }
 });
-
-// A 담당자의 달성 API/저장소가 아직 없으므로 가짜 구현으로 통과 처리하지 않습니다.
-for (const scenario of [
-  '같은 날짜 여러 저장은 피아노 달성 하루 한 번',
-  '녹음 삭제 후 피아노 달성 유지',
-  '같은 요일의 두 고유 날짜에서 건반 활성화',
-  '월 전환 후 이전 달 피아노 기록 보존',
-  '자정을 넘긴 저장의 피아노 달성은 저장 완료 날짜 기준',
-]) test(scenario, { skip: 'A의 피아노 달성 API와 저장소가 아직 없어 연동 검증 불가' }, () => {});

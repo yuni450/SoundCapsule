@@ -368,8 +368,8 @@ try {
     };
   }));
   let data = await snapshot();
-  assert.equal(data.version, 2); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모');
-  console.log('PASS: v1 -> v2 migration preserves metadata, audio bytes and local identity');
+  assert.equal(data.version, 4); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모');
+  console.log('PASS: v1 -> v4 migration preserves metadata, audio bytes and local identity');
   await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
   await page.getByText('지금, 소리를 담고 있어요').waitFor(); await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
