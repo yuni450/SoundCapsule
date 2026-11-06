@@ -5,7 +5,7 @@ import { launchBrowser, BASE_URL } from './helpers.js';
 async function seed(page, memo = '') {
   return page.evaluate(async memo => (await import('/src/storage/recordings.js')).saveRecording({
     blob: new Blob(['test fixture'], { type: 'audio/webm' }), title: '예외 상황 검증',
-    recordedAt: new Date().toISOString(), duration: 1, memo,
+    recordedAt: new Date().toISOString(), duration: 3, memo,
   }), memo);
 }
 
@@ -45,7 +45,7 @@ test('종료 API가 계속 실패해도 마이크가 해제되고 안내 후 재
     await page.evaluate(() => { MediaRecorder.prototype.stop = window.realStop; });
     await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
     await page.getByText('지금, 소리를 담고 있어요').waitFor();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(3200);
     await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
     await page.getByLabel('제목 필수').waitFor();
     assert.deepEqual(errors, []);
@@ -137,6 +137,7 @@ test('빠른 연속 시작·종료·저장과 새로고침 취소에서도 녹�
     page.once('dialog', async dialog => { assert.equal(dialog.type(), 'beforeunload'); await dialog.dismiss(); });
     await page.reload({ timeout: 3000 }).catch(error => { assert.match(error.message, /ERR_ABORTED|Timeout/); });
     assert.equal(await page.getByRole('button', { name: '녹음 종료', exact: true }).count(), 1);
+    await page.waitForTimeout(3200);
     await page.getByRole('button', { name: '녹음 종료', exact: true }).evaluate(button => { button.click(); button.click(); });
     await page.getByLabel('제목 필수').fill('연속 입력');
     await page.locator('form.sc-draft').evaluate(form => { form.requestSubmit(); form.requestSubmit(); });
@@ -171,7 +172,7 @@ test('모바일 터치·긴 제목/메모·사진 보기와 반복 화면 이동
     await page.goto(BASE_URL);
     await page.getByRole('button', { name: '녹음 시작', exact: true }).tap();
     await page.getByText('지금, 소리를 담고 있어요').waitFor();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(3200);
     await page.getByRole('button', { name: '녹음 종료', exact: true }).tap();
     const title = '긴'.repeat(100);
     await page.getByLabel('제목 필수').fill(title);
