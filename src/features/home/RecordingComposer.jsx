@@ -1,15 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { saveRecording } from '../../storage/recordings.js';
+import { readStored } from '../../lib/usePersistentState.js';
+import LocationPicker from '../location/LocationPicker.jsx';
+import { reverseGeocode } from '../googleMapsLoader.js';
 import { useAudioRecorder } from './useAudioRecorder.js';
 import AudioPlayer from './AudioPlayer.jsx';
 import { formatDuration } from './formatDuration.js';
 import './home.css';
 
 // 날짜/시간 입력은 제공하지 않습니다. recordedAt은 녹음 훅의 실제 시작 시각만 사용합니다.
-export default function RecordingComposer({ compact = false, canStart, startDisabled = false, onActivityChange, onSaved }) {
+export default function RecordingComposer({ compact = false, canStart, startDisabled = false, onActivityChange, onSaved,groups=[] }) {
   const recorder = useAudioRecorder({ canStart });
   const [title, setTitle] = useState('');
   const [locationName, setLocationName] = useState('');
+  const [includeLocation, setIncludeLocation] = useState(false);
+  const [coordinates, setCoordinates] = useState({ latitude: '', longitude: '' });
+  const [locationStatus, setLocationStatus] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [locationDetails,setLocationDetails]=useState({country:'',city:''});
+  const [pickerOpen,setPickerOpen]=useState(false);
+  const initialSound=readStored('settings:sound:v2',{});
+  const [visibility,setVisibility]=useState(()=>['private','friends','group'].includes(initialSound.visibility)?initialSound.visibility:'private');
+  const [groupId,setGroupId]=useState(()=>String(initialSound.defaultGroupId||groups[0]?.id||''));
   const [memo, setMemo] = useState('');
   const [saveError, setSaveError] = useState('');
   const [notice, setNotice] = useState('');
@@ -47,9 +59,16 @@ export default function RecordingComposer({ compact = false, canStart, startDisa
     setSaving(true);
     setSaveError('');
     try {
-      const saved = await saveRecording({ ...recorder.draft, title, locationName, memo });
+      const latitude = includeLocation ? Number(coordinates.latitude) : null;
+      const longitude = includeLocation ? Number(coordinates.longitude) : null;
+      if (includeLocation && (!coordinates.latitude.trim() || !coordinates.longitude.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude)>90 || Math.abs(longitude)>180)) {
+        setSaveError('지도에 표시할 위치를 확인해 주세요.');
+        return;
+      }
+      if(visibility==='group'&&!groupId){setSaveError('공개할 그룹을 선택해 주세요.');return}
+      const saved = await saveRecording({ ...recorder.draft, title, locationName, latitude, longitude, country:locationDetails.country,city:locationDetails.city,memo,visibility,groupId:visibility==='group'?groupId:null });
       recorder.reset();
-      setTitle(''); setLocationName(''); setMemo('');
+      setTitle(''); setLocationName(''); setMemo(''); setIncludeLocation(false); setCoordinates({ latitude:'',longitude:'' }); setLocationDetails({country:'',city:''});setLocationStatus('');
       setNotice('이 브라우저에 소중한 소리를 저장했어요.');
       onSaved?.(saved);
     } catch (error) {
@@ -61,6 +80,20 @@ export default function RecordingComposer({ compact = false, canStart, startDisa
       setSaving(false);
     }
   };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) { setLocationStatus('이 브라우저는 위치 기능을 지원하지 않아요.'); return; }
+    setLocating(true); setLocationStatus('현재 위치를 확인하고 있어요…');
+    navigator.geolocation.getCurrentPosition(async({ coords }) => {
+      setCoordinates({ latitude:coords.latitude.toFixed(6), longitude:coords.longitude.toFixed(6) });
+      try{const place=await reverseGeocode(coords.latitude,coords.longitude);setLocationName(current=>current.trim()?current:place.address);setLocationDetails({country:place.country,city:place.city});setLocationStatus(`현재 위치를 추가했어요 · 장소명·국가·도시 확인 완료 · 정확도 약 ${Math.round(coords.accuracy)}m`)}catch{setLocationStatus(`현재 위치를 추가했어요 · 장소명은 직접 입력해 주세요 · 정확도 약 ${Math.round(coords.accuracy)}m`)}
+      setLocating(false);
+    }, (error) => {
+      setLocationStatus(error.code === 1 ? '위치 권한을 허용해 주세요.' : '현재 위치를 확인하지 못했어요.');
+      setLocating(false);
+    }, { enableHighAccuracy:true,timeout:10000,maximumAge:60000 });
+  };
+  const resolveCoordinates=async()=>{const latitude=Number(coordinates.latitude),longitude=Number(coordinates.longitude);setLocating(true);setLocationStatus('좌표의 장소명을 찾고 있어요…');try{const place=await reverseGeocode(latitude,longitude);setLocationName(place.address);setLocationDetails({country:place.country,city:place.city});setLocationStatus('좌표에서 장소명·국가·도시를 찾았어요.')}catch(error){setLocationStatus(error.message)}finally{setLocating(false)}};
 
   const begin = () => { setNotice(''); setSaveError(''); recorder.start(); };
   const retry = () => {
@@ -107,6 +140,14 @@ export default function RecordingComposer({ compact = false, canStart, startDisa
                 <input ref={titleRef} id="recording-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="어떤 소리인가요?" required maxLength={100} />
                 <label htmlFor="recording-place">장소 <span>선택</span></label>
                 <input id="recording-place" value={locationName} onChange={(event) => setLocationName(event.target.value)} placeholder="이 소리를 만난 곳" maxLength={200} />
+                <label className="sc-location-toggle"><input type="checkbox" checked={includeLocation} onChange={(event)=>{setIncludeLocation(event.target.checked);setLocationStatus('')}}/><span>지도에 위치 표시</span></label>
+                {includeLocation&&<div className="sc-location-box">
+                  <div className="sc-location-actions"><button className="sc-secondary" type="button" onClick={()=>setPickerOpen(true)}>지도에서 선택</button><button className="sc-secondary" type="button" onClick={useCurrentLocation} disabled={locating}>{locating?'위치 확인 중…':'현재 위치 사용'}</button><button className="sc-secondary" type="button" onClick={resolveCoordinates} disabled={locating||!coordinates.latitude||!coordinates.longitude}>좌표로 장소 찾기</button></div>
+                  <div className="sc-coordinate-grid"><label htmlFor="recording-latitude">위도<input id="recording-latitude" inputMode="decimal" value={coordinates.latitude} onChange={(event)=>setCoordinates({...coordinates,latitude:event.target.value})} placeholder="37.5665"/></label><label htmlFor="recording-longitude">경도<input id="recording-longitude" inputMode="decimal" value={coordinates.longitude} onChange={(event)=>setCoordinates({...coordinates,longitude:event.target.value})} placeholder="126.9780"/></label></div>
+                  {locationStatus&&<p className="sc-location-status" role="status">{locationStatus}</p>}
+                </div>}
+                <label htmlFor="recording-visibility">공개 범위</label><select id="recording-visibility" value={visibility} onChange={event=>setVisibility(event.target.value)}><option value="private">나만 보기</option><option value="friends">친구에게 공개</option><option value="group">그룹 공개</option></select>
+                {visibility==='group'&&<><label htmlFor="recording-group">공개할 그룹</label><select id="recording-group" value={groupId} onChange={event=>setGroupId(event.target.value)} required><option value="">그룹 선택</option>{groups.map(group=><option key={group.id} value={String(group.id)}>{group.name}</option>)}</select></>}
                 <label htmlFor="recording-memo">메모 <span>선택</span></label>
                 <textarea id="recording-memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="이 순간의 기분을 남겨보세요" maxLength={500} rows={3} />
                 <div className="sc-actions"><button className="sc-secondary" type="button" onClick={retry} disabled={startDisabled}>다시 녹음하기</button><button className="sc-primary" type="submit">{saving ? '저장 중…' : '소리 저장하기'}</button></div>
@@ -115,5 +156,6 @@ export default function RecordingComposer({ compact = false, canStart, startDisa
             </form>
           )}
         </section>
+        {pickerOpen&&<LocationPicker initial={{name:locationName,latitude:coordinates.latitude===''?null:Number(coordinates.latitude),longitude:coordinates.longitude===''?null:Number(coordinates.longitude),...locationDetails}} onCancel={()=>setPickerOpen(false)} onConfirm={location=>{setLocationName(location.name);setCoordinates({latitude:String(location.latitude),longitude:String(location.longitude)});setLocationDetails({country:location.country,city:location.city});setIncludeLocation(true);setLocationStatus('지도에서 위치를 선택했어요.');setPickerOpen(false)}}/>}
   </div>;
 }

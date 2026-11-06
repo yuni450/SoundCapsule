@@ -1,4 +1,4 @@
-/** UTC로 저장된 녹음 시각을 사용자의 현지 날짜 키로 바꿉니다. */
+/** UTC 시각을 사용자의 현지 날짜 키로 바꿉니다. */
 export function localDateKey(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
@@ -18,7 +18,7 @@ export function monthCells(year, month) {
 export function groupByLocalDate(recordings) {
   const groups = new Map();
   for (const recording of recordings) {
-    const key = localDateKey(recording.recordedAt);
+    const key = localDateKey(recording.savedAt || recording.recordedAt);
     if (key) groups.set(key, [...(groups.get(key) ?? []), recording]);
   }
   return groups;

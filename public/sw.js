@@ -7,5 +7,5 @@ self.addEventListener('push',event=>{
 });
 self.addEventListener('notificationclick',event=>{
   event.notification.close();
-  event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(clients=>{const existing=clients.find(client=>'focus'in client);return existing?existing.focus():self.clients.openWindow(event.notification.data?.url||'/')}));
+  event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async clients=>{const url=event.notification.data?.url||'/';const target=new URL(url,self.location.origin).href;const existing=clients.find(client=>'focus'in client);if(existing){if('navigate'in existing)await existing.navigate(target);return existing.focus()}return self.clients.openWindow(target)}));
 });

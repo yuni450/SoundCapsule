@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AuthScreen from './AuthScreen.jsx';
 import { usePersistentState } from './lib/usePersistentState.js';
 import Home from './features/home/Home.jsx';
@@ -8,6 +8,19 @@ import FriendsHub from './features/FriendsHub.jsx';
 import GroupsHub from './features/GroupsHub.jsx';
 import SettingsHub from './features/SettingsHub.jsx';
 import PianoHub from './features/PianoHub.jsx';
+import { playNotificationSound } from './lib/sounds.js';
+
+const baseFriends = [
+  { id:'haru.wave',name:'하루',handle:'@haru.wave',color:'#dc9a79',status:'방금 새로운 소리를 남겼어요' },
+  { id:'min.zip',name:'민지',handle:'@min.zip',color:'#77a593',status:'서울 · 2시간 전' },
+  { id:'june.sound',name:'준',handle:'@june.sound',color:'#7995af',status:'부산 · 어제' },
+  { id:'sora.day',name:'소라',handle:'@sora.day',color:'#9283aa',status:'제주 · 3일 전' },
+];
+
+const baseGroups = [
+  { id:1,name:'여름 바다 여행',emoji:'🌊',members:['하루','민지','준','나'],preview:'민지: 파도 소리 올렸어!',time:'오후 2:18' },
+  { id:2,name:'우리들의 주말',emoji:'☀️',members:['소라','하루','나'],preview:'소라: 다음 주에도 만나요',time:'어제' },
+];
 
 const localSession = { id:'local.user',name:'나',role:'member',local:true };
 const bypassAuth = import.meta.env.VITE_E2E_BYPASS_AUTH === '1';
@@ -40,19 +53,21 @@ function Toast({ text }) {
   return text ? <div className="toast" role="status"><Icon name="check" size={17}/>{text}</div> : null;
 }
 
-function Avatar({ name }) {
-  return <span className="avatar sm coral">{name?.[0] || '나'}</span>;
+function Avatar({ name,image }) {
+  return image?<img className="avatar sm" src={image} alt=""/>:<span className="avatar sm coral">{name?.[0] || '나'}</span>;
 }
 
 export default function App() {
-  const [page,setPage]=useState('home');
+  const [page,setPage]=useState(()=>new URLSearchParams(location.search).has('openRecording')?'map':'home');
   const [homeActivity,setHomeActivity]=useState({hasUnsaved:false,busy:false});
   const [calendarActivity,setCalendarActivity]=useState({hasUnsaved:false,busy:false});
   const [users,setUsers]=usePersistentState('users',[]);
   const [session,setSession]=usePersistentState('session',initialSession);
+  const [sessions,setSessions]=usePersistentState('account:sessions',[]);
   const [toast,setToast]=useState('');
   const timer=useRef(null);
   const activity=page==='home'?homeActivity:page==='calendar'?calendarActivity:{hasUnsaved:false,busy:false};
+  useEffect(()=>{const check=event=>{if(!session?.sessionId)return;let revoked=[];try{revoked=JSON.parse(event?.newValue||localStorage.getItem('soundcapsule:revoked-sessions')||'[]')}catch{}if(revoked.includes(session.sessionId))setSession(null)};window.addEventListener('storage',check);check();return()=>window.removeEventListener('storage',check)},[session?.sessionId,setSession]);
 
   const navigate=(next)=>{
     if(next===page||activity.busy)return;
@@ -68,7 +83,7 @@ export default function App() {
     try{settings=saved?JSON.parse(saved):null}catch{}
     const enabled=settings?.[type]!==false;
     const inApp=settings?.channels?.inApp!==false;
-    if(inApp&&enabled){setToast(text);clearTimeout(timer.current);timer.current=setTimeout(()=>setToast(''),2500)}
+    if(inApp&&enabled){setToast(text);if(!document.hidden)playNotificationSound(settings?.sound||'soft');clearTimeout(timer.current);timer.current=setTimeout(()=>setToast(''),2500)}
     if(!enabled||settings?.channels?.push===false||!('Notification'in window)||Notification.permission!=='granted'||!document.hidden)return;
     const quiet=settings?.quiet;
     if(quiet?.enabled){const time=new Date().toTimeString().slice(0,5);const muted=quiet.start<quiet.end?time>=quiet.start&&time<quiet.end:time>=quiet.start||time<quiet.end;if(muted)return}
@@ -76,7 +91,7 @@ export default function App() {
     if(settings?.vibration)navigator.vibrate?.(80);
   };
 
-  if(!session||(session.local&&!bypassAuth))return <AuthScreen users={users} setUsers={setUsers} onLogin={user=>{setSession({id:user.id,name:user.name,role:user.role,loginAt:new Date().toISOString()});setPage('home')}}/>;
+  if(!session||(session.local&&!bypassAuth))return <AuthScreen users={users} setUsers={setUsers} onLogin={user=>{const loginAt=new Date().toISOString(),sessionId=crypto.randomUUID();setSession({id:user.id,name:user.name,role:user.role,profileImage:user.profileImage||null,loginAt,sessionId});setSessions(current=>[...current.filter(item=>item.userId!==user.id||item.sessionId!==sessionId),{sessionId,userId:user.id,loginAt,userAgent:navigator.userAgent,current:true}]);setPage(new URLSearchParams(location.search).has('openRecording')?'map':'home')}}/>;
 
   const content={
     home:<Home key={session.id} onActivityChange={setHomeActivity}/>,
@@ -91,6 +106,17 @@ export default function App() {
   return <div className="shell merged-shell">
     <aside className="sidebar"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><nav>{nav.map(item=><button type="button" className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav><button type="button" className="group-entry" aria-label="그룹 열기" aria-current={page==='groups'?'page':undefined} disabled={activity.busy} onClick={()=>navigate('groups')}><Icon name="chat"/>그룹 열기</button><div className="memory"><span>오늘의 지난 소리</span><strong>작년 오늘, 성수동</strong><p>카페 창가의 빗소리</p></div><div className="me"><Avatar name={session.name}/><span><strong>{session.name}</strong><small>@{session.id}</small></span></div></aside>
     <main className="main"><header className="mobile"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><button type="button" className="group-entry" aria-label="그룹 열기" disabled={activity.busy} onClick={()=>navigate('groups')}>그룹</button><Icon name="bell"/></header>{content[page]}</main>
+    home:<Home onActivityChange={setHomeActivity} groups={groups}/>,
+    calendar:<Calendar onActivityChange={setCalendarActivity} appGroups={groups}/>,
+    map:<MapHub notify={notify}/>,
+    friends:<FriendsHub friends={friends} setFriends={setFriends} blocked={blocked} setBlocked={setBlocked} notify={notify} currentUser={session}/>,
+    groups:<GroupsHub groups={groups} setGroups={setGroups} friends={friends} notify={notify} currentUser={session}/>,
+    settings:<SettingsHub notify={notify} currentUser={session} users={users} setUsers={setUsers} groups={groups} sessions={sessions.filter(item=>item.userId===session.id)} setSessions={setSessions} onProfileUpdate={profile=>{const oldId=session.id;setSession(current=>({...current,...profile}));setSessions(current=>current.map(item=>item.userId===oldId?{...item,userId:profile.id}:item))}} onRevokeSession={sessionId=>{setSessions(current=>current.filter(item=>item.sessionId!==sessionId));let revoked=[];try{revoked=JSON.parse(localStorage.getItem('soundcapsule:revoked-sessions')||'[]')}catch{}localStorage.setItem('soundcapsule:revoked-sessions',JSON.stringify([...new Set([...revoked,sessionId])]));if(sessionId===session.sessionId)setSession(null)}} onLogout={()=>{setSessions(current=>current.filter(item=>item.sessionId!==session.sessionId));setSession(null)}}/>,
+  };
+
+  return <div className="shell merged-shell">
+    <aside className="sidebar"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><nav>{nav.map(item=><button type="button" className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav><div className="memory"><span>오늘의 지난 소리</span><strong>작년 오늘, 성수동</strong><p>카페 창가의 빗소리</p></div><div className="me"><Avatar name={session.name} image={session.profileImage}/><span><strong>{session.name}</strong><small>@{session.id}</small></span></div></aside>
+    <main className="main"><header className="mobile"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><Icon name="bell"/></header>{content[page]}</main>
     <nav className="bottom" aria-label="주요 화면">{nav.map(item=><button type="button" aria-label={item.label} className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/><span aria-hidden="true">{item.shortLabel}</span></button>)}</nav>
     <Toast text={toast}/>
   </div>;

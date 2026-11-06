@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import AudioPlayer from '../home/AudioPlayer.jsx';
-import { addRecordingPhotos, deleteRecordingPhoto, getRecordingAudio, getRecordingPhoto, updateRecordingMemo } from '../../storage/recordings.js';
+import { addRecordingPhotos, cancelRecordingShare, deleteRecordingPhoto, getRecordingAudio, getRecordingPhoto, updateRecordingLocation, updateRecordingMemo, updateRecordingSharing } from '../../storage/recordings.js';
+import LocationPicker from '../location/LocationPicker.jsx';
 
 function Photo({ url, busy, onDelete }) {
   const [source, setSource] = useState('');
@@ -25,7 +26,7 @@ function Photo({ url, busy, onDelete }) {
   </li>;
 }
 
-export default function RecordingDetails({ recording, onActivityChange }) {
+export default function RecordingDetails({ recording, onActivityChange,groups=[] }) {
   const [memo, setMemo] = useState(recording.memo);
   const [dirty, setDirty] = useState(false);
   const [blob, setBlob] = useState(null);
@@ -33,6 +34,8 @@ export default function RecordingDetails({ recording, onActivityChange }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [sharing,setSharing]=useState({visibility:recording.visibility,groupId:recording.groupId||''});
   const lock = useRef(false);
   const mounted = useRef(true);
   const fileInput = useRef(null);
@@ -47,6 +50,7 @@ export default function RecordingDetails({ recording, onActivityChange }) {
     // 저장 직후 dirty만 바뀐 경우에는 재조회 전의 오래된 props로 덮어쓰지 않습니다.
     if (changed && !dirty) setMemo(recording.memo);
   }, [recording.memo, dirty]);
+  useEffect(()=>setSharing({visibility:recording.visibility,groupId:recording.groupId||''}),[recording.visibility,recording.groupId]);
   useEffect(() => {
     onActivityChange(recording.id, { dirty, busy });
   }, [recording.id, dirty, busy, onActivityChange]);
@@ -87,8 +91,11 @@ export default function RecordingDetails({ recording, onActivityChange }) {
     } finally { if (mounted.current) setLoadingAudio(false); }
   };
   return <li className="sc-cal-record">
-    <div className="sc-cal-record-heading"><h3>{recording.title}</h3><time dateTime={recording.recordedAt}>{new Date(recording.recordedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</time></div>
-    {recording.location.name && <p className="sc-cal-muted">{recording.location.name}</p>}
+    <div className="sc-cal-record-heading"><h3>{recording.title}</h3><time dateTime={recording.savedAt || recording.recordedAt}>{new Date(recording.savedAt || recording.recordedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</time></div>
+    <div className="sc-cal-location-row">
+      <p className="sc-cal-muted">{recording.location.name || '장소 이름 없음'}{Number.isFinite(recording.location.latitude) ? ` · 지도 위치 저장됨` : ' · 지도 위치 없음'}</p>
+      <div><button className="sc-cal-text" type="button" disabled={busy} onClick={() => setLocationPickerOpen(true)}>위치 {Number.isFinite(recording.location.latitude) ? '수정' : '추가'}</button>{Number.isFinite(recording.location.latitude) && <button className="sc-cal-text" type="button" disabled={busy} onClick={() => { if (window.confirm('이 녹음의 지도 위치를 제거할까요?')) change(() => updateRecordingLocation(recording.id, { name: recording.location.name, latitude: null, longitude: null, country: '', city: '' }), '지도 위치를 제거했어요.'); }}>위치 제거</button>}</div>
+    </div>
     {blob ? <AudioPlayer blob={blob} label={`${recording.title} 재생`} />
       : <button className="sc-cal-text" type="button" disabled={loadingAudio} onClick={loadAudio}>{loadingAudio ? '불러오는 중…' : '녹음 듣기'}</button>}
     <form onSubmit={(event) => { event.preventDefault(); change(() => updateRecordingMemo(recording.id, memo), '메모를 저장했어요.', true); }}>
@@ -96,6 +103,7 @@ export default function RecordingDetails({ recording, onActivityChange }) {
       <textarea id={`memo-${recording.id}`} value={memo} maxLength={500} rows={3} disabled={busy} onChange={(event) => { setMemo(event.target.value); setDirty(true); setNotice(''); }} placeholder="이날의 기억을 남겨보세요" />
       <div className="sc-cal-memo-actions"><span>{memo.length}/500{dirty ? ' · 저장 전' : ''}</span><button type="submit" disabled={busy || !dirty}>메모 저장</button></div>
     </form>
+    <section className="sc-cal-sharing"><h4>공유 관리</h4><div><select aria-label={`${recording.title} 공개 범위`} value={sharing.visibility} disabled={busy} onChange={event=>setSharing({...sharing,visibility:event.target.value})}><option value="private">나만 보기</option><option value="friends">친구 공개</option><option value="group">그룹 공개</option></select>{sharing.visibility==='group'&&<select aria-label={`${recording.title} 공개 그룹`} value={sharing.groupId} disabled={busy} onChange={event=>setSharing({...sharing,groupId:event.target.value})}><option value="">그룹 선택</option>{groups.map(group=><option key={group.id} value={String(group.id)}>{group.name}</option>)}</select>}<button type="button" disabled={busy||sharing.visibility==='group'&&!sharing.groupId} onClick={()=>change(()=>updateRecordingSharing(recording.id,sharing),'공개 범위를 변경했어요.')}>변경 저장</button>{recording.visibility!=='private'&&<button type="button" disabled={busy} onClick={()=>change(()=>cancelRecordingShare(recording.id),'공유를 취소했어요.')}>공유 취소</button>}</div><p className="sc-cal-muted">현재 상태 · {recording.visibility==='private'?'나만 보기':recording.visibility==='friends'?'친구 공개':`그룹 공개 (${groups.find(group=>String(group.id)===recording.groupId)?.name||recording.groupId})`}</p></section>
     <div className="sc-cal-photos-heading"><h4>함께 담은 사진</h4><button className="sc-cal-text" type="button" disabled={busy} onClick={() => fileInput.current.click()}>사진 추가</button></div>
     <input ref={fileInput} className="sc-cal-file" type="file" accept="image/*" multiple aria-label={`${recording.title} 사진 선택`} disabled={busy} onChange={(event) => {
       const files = [...event.target.files]; event.target.value = '';
@@ -108,5 +116,6 @@ export default function RecordingDetails({ recording, onActivityChange }) {
     {busy && <p role="status">저장 중…</p>}
     {notice && <p role="status" className="sc-cal-notice">{notice}</p>}
     {error && <p role="alert" className="sc-cal-error">{error}</p>}
+    {locationPickerOpen && <LocationPicker initial={recording.location} onCancel={() => setLocationPickerOpen(false)} onConfirm={(location) => { setLocationPickerOpen(false); change(() => updateRecordingLocation(recording.id, location), '위치를 저장했어요.'); }} />}
   </li>;
 }
