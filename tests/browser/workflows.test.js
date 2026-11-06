@@ -368,10 +368,8 @@ try {
     };
   }));
   let data = await snapshot();
-  assert.equal(data.version, 4); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모');
-  console.log('PASS: v1 -> v4 migration preserves metadata, audio bytes and local identity');
-  assert.equal(data.version, 5); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모'); assert.equal(data.records[0].savedAt, data.records[0].createdAt);
-  console.log('PASS: v1 -> v5 migration preserves metadata, audio bytes and local identity and adds savedAt');
+  assert.equal(data.version, 6); assert.equal(data.legacyAudio, 'legacy-bytes'); assert.equal(data.userId, 'local-legacy'); assert.equal(data.records[0].memo, '기존 메모'); assert.equal(data.records[0].savedAt, data.records[0].createdAt);
+  console.log('PASS: v1 -> v6 migration preserves metadata, audio bytes and local identity and adds savedAt');
   await page.getByRole('button', { name: '녹음 시작', exact: true }).click();
   await page.getByText('지금, 소리를 담고 있어요').waitFor(); await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
@@ -529,7 +527,6 @@ try {
   assert.equal(await page.getByRole('button', { name: '녹음 종료', exact: true }).count(), 1);
   await page.clock.setFixedTime(new Date('2026-11-06T15:00:03.000Z'));
   await page.getByText('날짜가 바뀌었어요. 진행 중인 녹음은 저장을 완료한 날짜에 표시됩니다.', { exact: false }).waitFor();
-  await page.getByText('날짜가 바뀌었어요. 진행 중인 녹음은 시작한 날짜에 저장됩니다.', { exact: false }).waitFor();
   await page.waitForTimeout(3200);
   await page.getByRole('button', { name: '녹음 종료', exact: true }).click();
   await page.getByLabel('제목 필수').fill('자정을 넘긴 소리');

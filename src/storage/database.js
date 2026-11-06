@@ -1,5 +1,5 @@
 const DB_NAME = 'soundcapsule';
-const DB_VERSION = 4;
+const DB_VERSION = 6;
 
 export function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -9,10 +9,10 @@ export function openDatabase() {
     }
     let blocked = false;
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
       if (!db.objectStoreNames.contains('recordings')) db.createObjectStore('recordings', { keyPath: 'id' });
-      for (const name of ['audio', 'settings', 'photos']) {
+      for (const name of ['audio', 'originalAudio', 'settings', 'photos', 'chatFiles']) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
       }
       if (!db.objectStoreNames.contains('pianoAchievements')) {
@@ -29,6 +29,16 @@ export function openDatabase() {
       if (!db.objectStoreNames.contains('communityGroups')) {
         const groups = db.createObjectStore('communityGroups', { keyPath: 'id' });
         groups.createIndex('byInvite', 'inviteCode', { unique: true });
+      }
+      if (event.oldVersion < 3) {
+        const records = request.transaction.objectStore('recordings');
+        records.openCursor().onsuccess = ({ target }) => {
+          const cursor = target.result;
+          if (!cursor) return;
+          const value = cursor.value;
+          if (!value.savedAt) cursor.update({ ...value, savedAt: value.createdAt || value.updatedAt || value.recordedAt });
+          cursor.continue();
+        };
       }
     };
     request.onerror = () => reject(request.error);

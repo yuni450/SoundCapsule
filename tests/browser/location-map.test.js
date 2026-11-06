@@ -24,7 +24,7 @@ test('홈에서 저장한 위치 녹음이 지도 목록과 실제 오디오에 
     await page.goto(BASE_URL);
     await page.getByRole('button',{name:'녹음 시작',exact:true}).click();
     await page.getByText('지금, 소리를 담고 있어요').waitFor();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(3200);
     await page.getByRole('button',{name:'녹음 종료',exact:true}).click();
     await page.getByLabel('제목 필수').fill('지도에 남긴 소리');
     await page.getByLabel('장소 선택').fill('서울 시청');

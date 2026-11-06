@@ -1,12 +1,11 @@
-import { runTransaction } from './database.js';
-import { requireViewer, assertSameViewer, AccessError } from '../services/localIdentity.js';
-import { authorizeRecording, READ_POLICY_STORES } from '../services/communityPolicy.js';
-import { captureSavedRecording, createSaveIntent, recordSuccessfulRecordingDay, retryPendingPianoEvents } from '../domain/piano/index.js';
 import { createRecording, validateRecording } from '../models/recording.js';
 import { isSavableRecordingDuration, MIN_RECORDING_MESSAGE } from '../lib/recordingPolicy.js';
+import { captureSavedRecording, createSaveIntent, recordSuccessfulRecordingDay } from '../domain/piano/index.js';
+import { AccessError, assertSameViewer, requireViewer } from '../services/localIdentity.js';
+import { authorizeRecording, READ_POLICY_STORES } from '../services/communityPolicy.js';
 
 const DB_NAME = 'soundcapsule';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const PHOTO_PREFIX = 'indexeddb://soundcapsule/photos/';
 const CHANGE_EVENT = 'soundcapsule:recordings-changed';
 
@@ -43,10 +42,6 @@ export function subscribeRecordings(callback) {
   };
 }
 
-async function transaction(stores, mode, run, options) {
-  const result = await runTransaction(stores, mode, run, options);
-  if (mode === 'readwrite') notifyChanges();
-  return result;
 function openDatabase() {
   return new Promise((resolve, reject) => {
     if (!globalThis.indexedDB) {
@@ -60,6 +55,21 @@ function openDatabase() {
       if (!db.objectStoreNames.contains('recordings')) db.createObjectStore('recordings', { keyPath: 'id' });
       for (const name of ['audio', 'originalAudio', 'settings', 'photos', 'chatFiles']) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+      }
+      if (!db.objectStoreNames.contains('pianoAchievements')) {
+        const achievements = db.createObjectStore('pianoAchievements', { keyPath: ['userId', 'localDate'] });
+        achievements.createIndex('byUserMonth', ['userId', 'yearMonth']);
+      }
+      if (!db.objectStoreNames.contains('pianoEvents')) {
+        const events = db.createObjectStore('pianoEvents', { keyPath: 'eventId' });
+        events.createIndex('byUserState', ['userId', 'status']);
+      }
+      if (!db.objectStoreNames.contains('communityFriends')) db.createObjectStore('communityFriends', { keyPath: ['a', 'b'] });
+      if (!db.objectStoreNames.contains('communityRequests')) db.createObjectStore('communityRequests', { keyPath: ['fromId', 'toId'] });
+      if (!db.objectStoreNames.contains('communityMembers')) db.createObjectStore('communityMembers', { keyPath: ['groupId', 'userId'] });
+      if (!db.objectStoreNames.contains('communityGroups')) {
+        const groups = db.createObjectStore('communityGroups', { keyPath: 'id' });
+        groups.createIndex('byInvite', 'inviteCode', { unique: true });
       }
       if (event.oldVersion < 3) {
         const records = request.transaction.objectStore('recordings');
@@ -116,30 +126,21 @@ async function transaction(stores, mode, run) {
 
 /** 실제 Blob과 공통 Recording을 하나의 트랜잭션으로 저장합니다. */
 export async function saveRecording({ blob, originalBlob = null, recordedAt, duration, title, locationName = '', latitude = null, longitude = null, country = '', city = '', memo = '', visibility = 'private', groupId = null, userId: requestedUserId }) {
-export async function saveRecording({ blob, recordedAt, duration, title, locationName = '', memo = '' }) {
-  // 신규 저장에만 적용하며 기존의 짧은 녹음 재생·편집·삭제에는 영향을 주지 않습니다.
   if (!isSavableRecordingDuration(duration)) throw new Error(MIN_RECORDING_MESSAGE);
   if (!(blob instanceof Blob) || blob.size === 0) throw new Error('저장할 녹음 파일이 없어요.');
-  const viewer = await requireViewer();
-  const sessionUserId = viewer.id;
-  let savedEvent;
-  const recording = await transaction(['recordings', 'audio', 'settings', 'pianoEvents'], 'readwrite', (tx, done, fail) => {
-    assertSameViewer(viewer);
+  const viewer=await requireViewer();
   const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
   if ((latitude !== null || longitude !== null) && !hasCoordinates) throw new Error('위도와 경도를 함께 확인해 주세요.');
-  return transaction(['recordings', 'audio', 'originalAudio', 'settings'], 'readwrite', (tx, done, fail) => {
+  const recording = await transaction(['recordings', 'audio', 'originalAudio', 'settings', 'pianoEvents'], 'readwrite', (tx, done, fail) => {
     const settings = tx.objectStore('settings');
     const identity = settings.get('localUserId');
     identity.onsuccess = () => {
       try {
         assertSameViewer(viewer);
-        // 로그인 ID를 우선하고, 로컬 실행은 기존 브라우저 소유자 ID를 유지합니다.
-        const userId = sessionUserId || identity.result || `local-${crypto.randomUUID()}`;
-        if (!sessionUserId && !identity.result) settings.add(userId, 'localUserId');
-        // 로그인 계정이 아닌 이 브라우저의 로컬 소유자 ID입니다.
-        let sessionUserId='';try{const session=JSON.parse(localStorage.getItem('soundcapsule:session')||'null');if(session&&!session.local)sessionUserId=session.id||''}catch{}
-        const userId = requestedUserId || sessionUserId || identity.result || `local-${crypto.randomUUID()}`;
-        if (!identity.result) settings.add(userId, 'localUserId');
+        // 일반 로그인에서는 현재 계정만 소유자가 될 수 있습니다. 테스트용 로컬 세션만 명시 ID를 허용합니다.
+        const userId = viewer.local ? (requestedUserId || viewer.id || identity.result) : viewer.id;
+        if (viewer.local && identity.result !== userId) settings.put(userId, 'localUserId');
+        else if (!identity.result) settings.add(userId, 'localUserId');
         const id = crypto.randomUUID();
         const savedAt = new Date().toISOString();
         const recording = createRecording({
@@ -150,65 +151,57 @@ export async function saveRecording({ blob, recordedAt, duration, title, locatio
         });
         tx.objectStore('recordings').add(recording);
         tx.objectStore('audio').add(blob, id);
-        tx.objectStore('pianoEvents').add(createSaveIntent(recording));
         if(originalBlob instanceof Blob&&originalBlob.size>0)tx.objectStore('originalAudio').add(originalBlob,id);
+        tx.objectStore('pianoEvents').add(createSaveIntent(recording));
         done(recording);
       } catch (error) {
         fail(error);
       }
     };
-  }, { onCommitted: (saved) => { savedEvent = captureSavedRecording(saved); } });
-  // 녹음 commit 후의 피아노 실패는 녹음 실패로 표시하거나 중복 저장하지 않습니다.
-  if (savedEvent) {
-    try { await recordSuccessfulRecordingDay(savedEvent); } catch { /* 영속 이벤트로 재시도 */ }
-  }
+  });
+  const savedEvent = captureSavedRecording(recording);
+  try { await recordSuccessfulRecordingDay(savedEvent); } catch { /* 영속 이벤트를 다음 조회에서 재시도합니다. */ }
   return recording;
 }
 
 /** 캘린더와 지도도 동일한 Recording 배열을 읽을 수 있습니다. */
 export async function listRecordings() {
-  const viewer = await requireViewer();
-  // 앱 재진입/화면 복귀 때 파일과 독립적인 미처리 달성을 복구합니다.
-  void retryPendingPianoEvents().catch(() => {});
-  const result = await transaction(['recordings'], 'readonly', (tx, done) => {
+  const viewer=await requireViewer();
+  const result=await transaction(['recordings'], 'readonly', (tx, done) => {
     tx.objectStore('recordings').getAll().onsuccess = (event) => {
-      done(event.target.result.filter(item => item.userId === viewer.id).sort((a, b) => Date.parse(b.recordedAt) - Date.parse(a.recordedAt)));
-      done(event.target.result.map((recording) => recording.savedAt ? recording : { ...recording, savedAt: recording.createdAt || recording.updatedAt || recording.recordedAt })
+      done(event.target.result.filter(recording=>recording.userId===viewer.id).map((recording) => recording.savedAt ? recording : { ...recording, savedAt: recording.createdAt || recording.updatedAt || recording.recordedAt })
         .sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt)));
     };
   });
-  assertSameViewer(viewer); return result;
+  assertSameViewer(viewer);return result;
 }
 
 /** audioUrl은 저장소 식별자입니다. 재생하려면 이 Blob을 object URL로 변환하세요. */
 export async function getRecordingAudio(id) {
-  const viewer = await requireViewer();
-  const result = await transaction(['recordings', 'audio', ...READ_POLICY_STORES], 'readonly', (tx, done, fail) => {
-    tx.objectStore('recordings').get(id).onsuccess = ({ target }) => authorizeRecording(tx, viewer.id, target.result, () => {
-      tx.objectStore('audio').get(id).onsuccess = ({ target }) => done(target.result ?? null);
-    }, fail);
+  const viewer=await requireViewer();
+  const result=await transaction(['recordings','audio',...READ_POLICY_STORES], 'readonly', (tx, done, fail) => {
+    tx.objectStore('recordings').get(id).onsuccess=({target})=>authorizeRecording(tx,viewer.id,target.result,()=>{
+      tx.objectStore('audio').get(id).onsuccess = (event) => done(event.target.result ?? null);
+    },fail);
   });
-  assertSameViewer(viewer); return result;
+  assertSameViewer(viewer);return result;
 }
 
-export function getOriginalRecordingAudio(id){return transaction(['originalAudio'],'readonly',(tx,done)=>{tx.objectStore('originalAudio').get(id).onsuccess=({target})=>done(target.result??null)})}
+export async function getOriginalRecordingAudio(id){const viewer=await requireViewer();const result=await transaction(['recordings','originalAudio',...READ_POLICY_STORES],'readonly',(tx,done,fail)=>{tx.objectStore('recordings').get(id).onsuccess=({target})=>authorizeRecording(tx,viewer.id,target.result,()=>{tx.objectStore('originalAudio').get(id).onsuccess=({target})=>done(target.result??null)},fail)});assertSameViewer(viewer);return result}
 
 /** 지정한 기록의 정보와 오디오만 원자적으로 삭제합니다. */
 export async function deleteRecording(id) {
-  const viewer = await requireViewer();
+  const viewer=await requireViewer();
   if (typeof id !== 'string' || !id.trim()) {
     return Promise.reject(new TypeError('삭제할 녹음 ID가 필요합니다.'));
   }
-  return transaction(['recordings', 'audio', 'photos'], 'readwrite', (tx, done, fail) => {
-    assertSameViewer(viewer);
   return transaction(['recordings', 'audio', 'originalAudio', 'photos'], 'readwrite', (tx, done, fail) => {
     const records = tx.objectStore('recordings');
     records.get(id).onsuccess = ({ target }) => {
       try {
         assertSameViewer(viewer);
-        if (!target.result) return;
-        if (target.result.userId !== viewer.id) throw new AccessError('본인의 녹음만 삭제할 수 있어요.');
-        for (const url of target.result.photoUrls ?? []) {
+        if(target.result&&target.result.userId!==viewer.id)throw new AccessError('본인의 녹음만 삭제할 수 있어요.');
+        for (const url of target.result?.photoUrls ?? []) {
           if (url.startsWith(PHOTO_PREFIX)) tx.objectStore('photos').delete(url.slice(PHOTO_PREFIX.length));
         }
         records.delete(id);
@@ -220,16 +213,14 @@ export async function deleteRecording(id) {
 }
 
 async function editRecording(id, stores, edit) {
-  const viewer = await requireViewer();
+  const viewer=await requireViewer();
   return transaction(['recordings', ...stores], 'readwrite', (tx, done, fail) => {
-    assertSameViewer(viewer);
     const records = tx.objectStore('recordings');
     records.get(id).onsuccess = ({ target }) => {
       try {
         assertSameViewer(viewer);
         if (!target.result) throw new Error('녹음이 삭제되었거나 존재하지 않아요.');
-        if (target.result.userId !== viewer.id) throw new AccessError('본인의 녹음만 수정할 수 있어요.');
-        const updated = edit(target.result, tx);
+        if(target.result.userId!==viewer.id)throw new AccessError('본인의 녹음만 수정할 수 있어요.');
         const current = target.result.savedAt ? target.result : { ...target.result, savedAt: target.result.createdAt || target.result.updatedAt || target.result.recordedAt };
         const updated = edit(current, tx);
         updated.updatedAt = new Date().toISOString();
@@ -320,17 +311,15 @@ export function addRecordingPhotos(id, files) {
 }
 
 export async function getRecordingPhoto(url) {
-  if (typeof url !== 'string' || !url.startsWith(PHOTO_PREFIX)) return null;
-  const viewer = await requireViewer();
-  const result = await transaction(['recordings', 'photos', ...READ_POLICY_STORES], 'readonly', (tx, done, fail) => {
-    tx.objectStore('recordings').getAll().onsuccess = ({ target }) => {
-      const recording = target.result.find(item => item.photoUrls.includes(url));
-      authorizeRecording(tx, viewer.id, recording, () => {
-        tx.objectStore('photos').get(url.slice(PHOTO_PREFIX.length)).onsuccess = ({ target }) => done(target.result ?? null);
-      }, fail);
+  if (typeof url !== 'string' || !url.startsWith(PHOTO_PREFIX)) return Promise.resolve(null);
+  const viewer=await requireViewer();
+  const result=await transaction(['recordings','photos',...READ_POLICY_STORES], 'readonly', (tx, done, fail) => {
+    tx.objectStore('recordings').getAll().onsuccess=({target})=>{
+      const recording=target.result.find(item=>item.photoUrls?.includes(url));
+      authorizeRecording(tx,viewer.id,recording,()=>{tx.objectStore('photos').get(url.slice(PHOTO_PREFIX.length)).onsuccess = ({ target }) => done(target.result ?? null)},fail);
     };
   });
-  assertSameViewer(viewer); return result;
+  assertSameViewer(viewer);return result;
 }
 
 export function deleteRecordingPhoto(id, url) {

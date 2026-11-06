@@ -41,8 +41,8 @@ function Icon({ name, size = 20 }) {
     map:<><path d="M3 6.5 8.5 3l7 3.5L21 3v14.5L15.5 21l-7-3.5L3 21z"/><path d="M8.5 3v14.5M15.5 6.5V21"/></>,
     people:<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></>,
     chat:<><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></>,
-    settings:<><circle cx="12" cy="12" r="3"/><path d="M19 15l2 2-4 4-2-2a8 8 0 0 1-3 1v3H7v-3a8 8 0 0 1-2-1l-2 2-4-4 2-2a8 8 0 0 1-1-3h-3V7h3a8 8 0 0 1 1-2l-2-2 4-4 2 2a8 8 0 0 1 2-1v-3h5v3a8 8 0 0 1 3 1l2-2 4 4-2 2a8 8 0 0 1 1 2h3v5h-3a8 8 0 0 1-1 3z"/></>,
     music:<><path d="M10 18V5l10-2v13M10 8l10-2"/><ellipse cx="7" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></>,
+    settings:<><circle cx="12" cy="12" r="3"/><path d="M19 15l2 2-4 4-2-2a8 8 0 0 1-3 1v3H7v-3a8 8 0 0 1-2-1l-2 2-4-4 2-2a8 8 0 0 1-1-3h-3V7h3a8 8 0 0 1 1-2l-2-2 4-4 2 2a8 8 0 0 1 2-1v-3h5v3a8 8 0 0 1 3 1l2-2 4 4-2 2a8 8 0 0 1 1 2h3v5h-3a8 8 0 0 1-1 3z"/></>,
     bell:<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
     check:<path d="m5 12 4 4L19 6"/>,
   };
@@ -61,6 +61,9 @@ export default function App() {
   const [page,setPage]=useState(()=>new URLSearchParams(location.search).has('openRecording')?'map':'home');
   const [homeActivity,setHomeActivity]=useState({hasUnsaved:false,busy:false});
   const [calendarActivity,setCalendarActivity]=useState({hasUnsaved:false,busy:false});
+  const [friends,setFriends]=usePersistentState('friends',baseFriends);
+  const [blocked,setBlocked]=usePersistentState('blocked',[]);
+  const [groups,setGroups]=usePersistentState('groups',baseGroups);
   const [users,setUsers]=usePersistentState('users',[]);
   const [session,setSession]=usePersistentState('session',initialSession);
   const [sessions,setSessions]=usePersistentState('account:sessions',[]);
@@ -78,7 +81,7 @@ export default function App() {
   };
 
   const notify=(text,type='message')=>{
-    const saved=localStorage.getItem(`soundcapsule:settings:alerts:v2:${session?.id}`);
+    const saved=localStorage.getItem('soundcapsule:settings:alerts:v2');
     let settings=null;
     try{settings=saved?JSON.parse(saved):null}catch{}
     const enabled=settings?.[type]!==false;
@@ -94,29 +97,18 @@ export default function App() {
   if(!session||(session.local&&!bypassAuth))return <AuthScreen users={users} setUsers={setUsers} onLogin={user=>{const loginAt=new Date().toISOString(),sessionId=crypto.randomUUID();setSession({id:user.id,name:user.name,role:user.role,profileImage:user.profileImage||null,loginAt,sessionId});setSessions(current=>[...current.filter(item=>item.userId!==user.id||item.sessionId!==sessionId),{sessionId,userId:user.id,loginAt,userAgent:navigator.userAgent,current:true}]);setPage(new URLSearchParams(location.search).has('openRecording')?'map':'home')}}/>;
 
   const content={
-    home:<Home key={session.id} onActivityChange={setHomeActivity}/>,
-    calendar:<Calendar key={session.id} onActivityChange={setCalendarActivity}/>,
+    home:<Home key={session.id} onActivityChange={setHomeActivity} groups={groups}/>,
+    calendar:<Calendar key={session.id} onActivityChange={setCalendarActivity} appGroups={groups}/>,
     map:<MapHub notify={notify}/>,
     piano:<PianoHub key={session.id} userId={session.local?undefined:session.id}/>,
-    friends:<FriendsHub key={session.id} currentUser={session}/>,
-    groups:<GroupsHub key={session.id} currentUser={session}/>,
-    settings:<SettingsHub key={session.id} notify={notify} currentUser={session} onLogout={()=>setSession(null)}/>,
-  };
-
-  return <div className="shell merged-shell">
-    <aside className="sidebar"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><nav>{nav.map(item=><button type="button" className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav><button type="button" className="group-entry" aria-label="그룹 열기" aria-current={page==='groups'?'page':undefined} disabled={activity.busy} onClick={()=>navigate('groups')}><Icon name="chat"/>그룹 열기</button><div className="memory"><span>오늘의 지난 소리</span><strong>작년 오늘, 성수동</strong><p>카페 창가의 빗소리</p></div><div className="me"><Avatar name={session.name}/><span><strong>{session.name}</strong><small>@{session.id}</small></span></div></aside>
-    <main className="main"><header className="mobile"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><button type="button" className="group-entry" aria-label="그룹 열기" disabled={activity.busy} onClick={()=>navigate('groups')}>그룹</button><Icon name="bell"/></header>{content[page]}</main>
-    home:<Home onActivityChange={setHomeActivity} groups={groups}/>,
-    calendar:<Calendar onActivityChange={setCalendarActivity} appGroups={groups}/>,
-    map:<MapHub notify={notify}/>,
     friends:<FriendsHub friends={friends} setFriends={setFriends} blocked={blocked} setBlocked={setBlocked} notify={notify} currentUser={session}/>,
     groups:<GroupsHub groups={groups} setGroups={setGroups} friends={friends} notify={notify} currentUser={session}/>,
     settings:<SettingsHub notify={notify} currentUser={session} users={users} setUsers={setUsers} groups={groups} sessions={sessions.filter(item=>item.userId===session.id)} setSessions={setSessions} onProfileUpdate={profile=>{const oldId=session.id;setSession(current=>({...current,...profile}));setSessions(current=>current.map(item=>item.userId===oldId?{...item,userId:profile.id}:item))}} onRevokeSession={sessionId=>{setSessions(current=>current.filter(item=>item.sessionId!==sessionId));let revoked=[];try{revoked=JSON.parse(localStorage.getItem('soundcapsule:revoked-sessions')||'[]')}catch{}localStorage.setItem('soundcapsule:revoked-sessions',JSON.stringify([...new Set([...revoked,sessionId])]));if(sessionId===session.sessionId)setSession(null)}} onLogout={()=>{setSessions(current=>current.filter(item=>item.sessionId!==session.sessionId));setSession(null)}}/>,
   };
 
   return <div className="shell merged-shell">
-    <aside className="sidebar"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><nav>{nav.map(item=><button type="button" className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav><div className="memory"><span>오늘의 지난 소리</span><strong>작년 오늘, 성수동</strong><p>카페 창가의 빗소리</p></div><div className="me"><Avatar name={session.name} image={session.profileImage}/><span><strong>{session.name}</strong><small>@{session.id}</small></span></div></aside>
-    <main className="main"><header className="mobile"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><Icon name="bell"/></header>{content[page]}</main>
+    <aside className="sidebar"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><nav>{nav.map(item=><button type="button" className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/>{item.label}</button>)}</nav><button type="button" className="group-entry" aria-label="그룹 열기" aria-current={page==='groups'?'page':undefined} disabled={activity.busy} onClick={()=>navigate('groups')}><Icon name="chat"/>그룹 열기</button><div className="memory"><span>오늘의 지난 소리</span><strong>작년 오늘, 성수동</strong><p>카페 창가의 빗소리</p></div><div className="me"><Avatar name={session.name} image={session.profileImage}/><span><strong>{session.name}</strong><small>@{session.id}</small></span></div></aside>
+    <main className="main"><header className="mobile"><div className="brand"><i><b/><b/><b/></i>SoundCapsule</div><button type="button" className="group-entry" aria-label="그룹 열기" disabled={activity.busy} onClick={()=>navigate('groups')}>그룹</button><Icon name="bell"/></header>{content[page]}</main>
     <nav className="bottom" aria-label="주요 화면">{nav.map(item=><button type="button" aria-label={item.label} className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} disabled={activity.busy} key={item.id} onClick={()=>navigate(item.id)}><Icon name={item.icon}/><span aria-hidden="true">{item.shortLabel}</span></button>)}</nav>
     <Toast text={toast}/>
   </div>;
